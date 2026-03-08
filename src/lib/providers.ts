@@ -301,28 +301,45 @@ export async function generateWhiskImage(
   const accessToken = sessionResult?.data?.access_token;
   if (!accessToken) throw new Error("No access_token in Whisk session — cookie may be expired. Update it in Settings.");
 
-  // Step 2: Upload style reference images if provided
-  const styleMediaIds: string[] = [];
+  // Step 2: If we have style refs, use the full Whisk recipe flow
   if (styleImageUrls && styleImageUrls.length > 0) {
+    // 2a. Create a Whisk project
+    const workflowId = await createWhiskProject(cookie);
+    console.log(`[whisk] Created project: ${workflowId}`);
+
+    // 2b. For each style ref: fetch → base64 → caption → upload → get mediaId
+    const styleRefs: { mediaGenerationId: string; caption: string }[] = [];
     for (const url of styleImageUrls) {
       try {
         const res = await fetch(url);
         if (!res.ok) continue;
         const blob = await res.blob();
-        const mediaId = await uploadToWhisk(blob, cookie, accessToken);
-        styleMediaIds.push(mediaId);
+        const rawBytes = await blobToBase64DataUrl(blob);
+
+        // Caption the image
+        const caption = await captionWhiskImage(
+          rawBytes, "MEDIA_CATEGORY_STYLE", workflowId, cookie
+        );
+        console.log(`[whisk] Captioned style ref: ${caption.substring(0, 80)}`);
+
+        // Upload with caption
+        const mediaId = await uploadToWhisk(
+          rawBytes, caption, "MEDIA_CATEGORY_STYLE", workflowId, cookie
+        );
+        console.log(`[whisk] Uploaded style ref, mediaId: ${mediaId}`);
+
+        styleRefs.push({ mediaGenerationId: mediaId, caption });
       } catch (e: any) {
-        console.warn(`Failed to upload style ref: ${e.message}`);
+        console.warn(`Failed to process style ref: ${e.message}`);
       }
     }
-  }
 
-  // Step 3: Generate image — use Recipe endpoint if we have style refs, otherwise plain ImageFx
-  if (styleMediaIds.length > 0) {
-    const recipeMediaInputs = styleMediaIds.map(id => ({
+    // 2c. Generate with references using runImageRecipe
+    const recipeMediaInputs = styleRefs.map(ref => ({
+      caption: ref.caption,
       mediaInput: {
         mediaCategory: "MEDIA_CATEGORY_STYLE",
-        mediaGenerationId: id,
+        mediaGenerationId: ref.mediaGenerationId,
       },
     }));
 
@@ -331,17 +348,16 @@ export async function generateWhiskImage(
       accessToken,
       payload: {
         clientContext: {
-          sessionId: String(Date.now()),
+          workflowId,
           tool: "BACKBONE",
-          workflowId: crypto.randomUUID(),
         },
         imageModelSettings: {
-          modelNameType: "IMAGEN_3_5",
-          imageAspectRatio: "IMAGE_ASPECT_RATIO_LANDSCAPE",
+          imageModel: "GEM_PIX",
+          aspectRatio: "IMAGE_ASPECT_RATIO_LANDSCAPE",
         },
+        userInstruction: prompt,
         recipeMediaInputs,
-        additionalInput: prompt,
-        seed: null,
+        seed: 0,
       },
     });
 
@@ -353,22 +369,18 @@ export async function generateWhiskImage(
       throw new Error(`Whisk recipe failed (${genResult.status}): ${detail}`);
     }
 
-    const genData = genResult.data;
-    const encodedImage = genData?.imagePanels?.[0]?.generatedImages?.[0]?.encodedImage
-      || genData?.results?.[0]?.encodedImage;
+    const encodedImage = genResult.data?.imagePanels?.[0]?.generatedImages?.[0]?.encodedImage;
     if (!encodedImage) throw new Error("No image in Whisk recipe response");
 
-    const binary = atob(encodedImage);
-    const bytes = new Uint8Array(binary.length);
-    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-    return new Blob([bytes], { type: "image/png" });
+    return base64ToBlob(encodedImage);
   } else {
+    // Plain text-to-image via ImageFx
     const genResult = await whiskProxy({
       action: "generate",
       accessToken,
       payload: {
-        userInput: { candidatesCount: 1, prompts: [prompt] },
-        clientContext: { tool: "IMAGE_FX" },
+        userInput: { candidatesCount: 1, prompts: [prompt], seed: 0 },
+        clientContext: { sessionId: String(Date.now()), tool: "IMAGE_FX" },
         modelInput: { modelNameType: "IMAGEN_3_5" },
         aspectRatio: "IMAGE_ASPECT_RATIO_LANDSCAPE",
       },
@@ -382,15 +394,28 @@ export async function generateWhiskImage(
       throw new Error(`Whisk failed (${genResult.status}): ${detail}`);
     }
 
-    const genData = genResult.data;
-    const encodedImage = genData?.imagePanels?.[0]?.generatedImages?.[0]?.encodedImage;
+    const encodedImage = genResult.data?.imagePanels?.[0]?.generatedImages?.[0]?.encodedImage;
     if (!encodedImage) throw new Error("No image in Whisk response");
 
-    const binary = atob(encodedImage);
-    const bytes = new Uint8Array(binary.length);
-    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-    return new Blob([bytes], { type: "image/png" });
+    return base64ToBlob(encodedImage);
   }
+}
+
+// Convert blob to data URL (data:image/...;base64,...) for Whisk API
+async function blobToBase64DataUrl(blob: Blob): Promise<string> {
+  const buf = await blob.arrayBuffer();
+  const bytes = new Uint8Array(buf);
+  let binary = "";
+  for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+  const mimeType = blob.type || "image/png";
+  return `data:${mimeType};base64,${btoa(binary)}`;
+}
+
+function base64ToBlob(encodedImage: string): Blob {
+  const binary = atob(encodedImage);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return new Blob([bytes], { type: "image/png" });
 }
 
 // ========================
