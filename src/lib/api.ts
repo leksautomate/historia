@@ -278,7 +278,7 @@ export async function regenerateAssetFrontend(
         audioBlob = await generateInworldAudio(
           scene.tts_text || scene.script_text || "",
           settings.inworldApiKey,
-          settings.voiceId || "Dennis",
+          voiceOverride || (scene as any).voice_id || settings.voiceId || "Dennis",
           settings.modelId || "inworld-tts-1.5-max"
         );
       } else {
