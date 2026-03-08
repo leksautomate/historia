@@ -181,13 +181,6 @@ export async function generateSceneManifest(
   return scenes;
 }
 
-  const data = result.data;
-  let content = data?.choices?.[0]?.message?.content;
-  if (!content) throw new Error("No content from Groq");
-  content = content.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim();
-  return JSON.parse(content).scenes || [];
-}
-
 // ========================
 // Whisk — Image generation
 // ========================
