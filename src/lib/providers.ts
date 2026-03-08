@@ -156,7 +156,7 @@ export async function generateSceneManifest(
     payload: {
       model: "llama-3.3-70b-versatile",
       messages: [
-        { role: "system", content: SCENE_SYSTEM_PROMPT },
+        { role: "system", content: systemPrompt },
         { role: "user", content: userPrompt },
       ],
       temperature: 0.3,

@@ -199,7 +199,7 @@ export async function createProjectFrontend(
         audioBlob = await generateInworldAudio(
           scene.tts_text || scene.script_text || "",
           settings.inworldApiKey,
-          settings.voiceId,
+          options.voiceId || settings.voiceId,
           settings.modelId
         );
       } else {
