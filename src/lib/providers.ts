@@ -157,25 +157,40 @@ export async function generateSceneManifest(
 // Whisk — Image generation
 // ========================
 
-// Upload an image to Whisk and get a media generation ID for use as a reference
-async function uploadToWhisk(imageBlob: Blob, cookie: string, accessToken: string): Promise<string> {
-  const base64 = await blobToBase64(imageBlob);
-  const uploadRes = await fetch("https://labs.google/fx/api/trpc/backbone.uploadImage", {
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+
+async function whiskProxy(body: any): Promise<any> {
+  const res = await fetch(`${SUPABASE_URL}/functions/v1/whisk-proxy`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      cookie,
+      Authorization: `Bearer ${SUPABASE_KEY}`,
     },
-    body: JSON.stringify({
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const errText = await res.text();
+    throw new Error(`Whisk proxy error (HTTP ${res.status}): ${errText.substring(0, 200)}`);
+  }
+  return res.json();
+}
+
+// Upload an image to Whisk and get a media generation ID for use as a reference
+async function uploadToWhisk(imageBlob: Blob, cookie: string, accessToken: string): Promise<string> {
+  const base64 = await blobToBase64(imageBlob);
+  const result = await whiskProxy({
+    action: "upload",
+    cookie,
+    payload: {
       json: {
         imageBytes: base64,
         mimeType: imageBlob.type || "image/png",
       },
-    }),
+    },
   });
-  if (!uploadRes.ok) throw new Error(`Whisk upload failed: ${uploadRes.status}`);
-  const uploadData = await uploadRes.json();
-  const mediaId = uploadData?.result?.data?.json?.mediaGenerationId;
+  if (result.status && result.status >= 400) throw new Error(`Whisk upload failed: ${result.status}`);
+  const mediaId = result?.data?.result?.data?.json?.mediaGenerationId;
   if (!mediaId) throw new Error("No mediaGenerationId from Whisk upload");
   return mediaId;
 }
@@ -210,20 +225,15 @@ export async function generateWhiskImage(
   cookie: string,
   styleImageUrls?: string[]
 ): Promise<Blob> {
-  // Step 1: Get auth token
-  const sessionRes = await fetch("https://labs.google/fx/api/auth/session", {
-    headers: { cookie },
-  }).catch((e) => {
-    throw new Error(`Whisk connection failed — this is likely a CORS issue. Whisk API calls must be made from a browser with the correct cookie. Details: ${e.message}`);
-  });
-  if (sessionRes.status === 401 || sessionRes.status === 403) {
+  // Step 1: Get auth token via proxy
+  const sessionResult = await whiskProxy({ action: "session", cookie });
+  if (sessionResult.status === 401 || sessionResult.status === 403) {
     throw new Error("Whisk cookie expired or invalid. Go to Settings and update your Whisk Cookie (copy fresh from labs.google).");
   }
-  if (!sessionRes.ok) {
-    throw new Error(`Whisk session failed (HTTP ${sessionRes.status}). Check your Whisk Cookie in Settings.`);
+  if (sessionResult.status && sessionResult.status >= 400) {
+    throw new Error(`Whisk session failed (HTTP ${sessionResult.status}). Check your Whisk Cookie in Settings.`);
   }
-  const session = await sessionRes.json();
-  const accessToken = session?.access_token;
+  const accessToken = sessionResult?.data?.access_token;
   if (!accessToken) throw new Error("No access_token in Whisk session — cookie may be expired. Update it in Settings.");
 
   // Step 2: Upload style reference images if provided
@@ -244,7 +254,6 @@ export async function generateWhiskImage(
 
   // Step 3: Generate image — use Recipe endpoint if we have style refs, otherwise plain ImageFx
   if (styleMediaIds.length > 0) {
-    // Use runImageRecipe with style references
     const recipeMediaInputs = styleMediaIds.map(id => ({
       mediaInput: {
         mediaCategory: "MEDIA_CATEGORY_STYLE",
@@ -252,13 +261,10 @@ export async function generateWhiskImage(
       },
     }));
 
-    const genRes = await fetch("https://aisandbox-pa.googleapis.com/v1/whisk:runImageRecipe", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${accessToken}`,
-      },
-      body: JSON.stringify({
+    const genResult = await whiskProxy({
+      action: "generate-recipe",
+      accessToken,
+      payload: {
         clientContext: {
           sessionId: String(Date.now()),
           tool: "BACKBONE",
@@ -271,17 +277,16 @@ export async function generateWhiskImage(
         recipeMediaInputs,
         additionalInput: prompt,
         seed: null,
-      }),
+      },
     });
 
-    if (!genRes.ok) {
-      const errText = await genRes.text();
-      if (genRes.status === 429) throw new Error("Whisk rate limited — wait a minute and try again.");
-      if (genRes.status === 401 || genRes.status === 403) throw new Error("Whisk auth expired. Update your Whisk Cookie in Settings.");
-      throw new Error(`Whisk recipe generation failed (HTTP ${genRes.status}): ${errText.substring(0, 200)}`);
+    if (genResult.status && genResult.status >= 400) {
+      if (genResult.status === 429) throw new Error("Whisk rate limited — wait a minute and try again.");
+      if (genResult.status === 401 || genResult.status === 403) throw new Error("Whisk auth expired. Update your Whisk Cookie in Settings.");
+      throw new Error(`Whisk recipe generation failed (HTTP ${genResult.status})`);
     }
 
-    const genData = await genRes.json();
+    const genData = genResult.data;
     const encodedImage = genData?.imagePanels?.[0]?.generatedImages?.[0]?.encodedImage
       || genData?.results?.[0]?.encodedImage;
     if (!encodedImage) throw new Error("No image in Whisk recipe response");
@@ -291,30 +296,25 @@ export async function generateWhiskImage(
     for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
     return new Blob([bytes], { type: "image/png" });
   } else {
-    // Fallback: plain text-to-image via runImageFx
-    const genRes = await fetch("https://aisandbox-pa.googleapis.com/v1:runImageFx", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${accessToken}`,
-      },
-      body: JSON.stringify({
+    const genResult = await whiskProxy({
+      action: "generate",
+      accessToken,
+      payload: {
         userInput: { candidatesCount: 1, prompts: [prompt] },
         generationParams: { seed: null },
         clientContext: { tool: "WHISK" },
         modelInput: { modelNameType: "IMAGEN_3_5" },
         aspectRatio: "LANDSCAPE",
-      }),
+      },
     });
 
-    if (!genRes.ok) {
-      const errText = await genRes.text();
-      if (genRes.status === 429) throw new Error("Whisk rate limited — wait a minute and try again.");
-      if (genRes.status === 401 || genRes.status === 403) throw new Error("Whisk auth expired. Update your Whisk Cookie in Settings.");
-      throw new Error(`Whisk generation failed (HTTP ${genRes.status}): ${errText.substring(0, 200)}`);
+    if (genResult.status && genResult.status >= 400) {
+      if (genResult.status === 429) throw new Error("Whisk rate limited — wait a minute and try again.");
+      if (genResult.status === 401 || genResult.status === 403) throw new Error("Whisk auth expired. Update your Whisk Cookie in Settings.");
+      throw new Error(`Whisk generation failed (HTTP ${genResult.status})`);
     }
 
-    const genData = await genRes.json();
+    const genData = genResult.data;
     const encodedImage = genData?.imagePanels?.[0]?.generatedImages?.[0]?.encodedImage;
     if (!encodedImage) throw new Error("No image in Whisk response");
 
