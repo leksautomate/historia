@@ -159,6 +159,37 @@ export default function ProjectForm() {
               ))}
             </div>
 
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-foreground">Narration Voice</label>
+                <Select value={voiceId} onValueChange={setVoiceId}>
+                  <SelectTrigger className="bg-secondary border-border">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {INWORLD_VOICES.map((v) => (
+                      <SelectItem key={v.id} value={v.id}>
+                        {v.name} — {v.description}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-foreground">Script Split Mode</label>
+                <Select value={splitMode} onValueChange={(v) => setSplitMode(v as "smart" | "exact")}>
+                  <SelectTrigger className="bg-secondary border-border">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="smart">Smart — sentence-aware beats</SelectItem>
+                    <SelectItem value="exact">Exact — paragraph boundaries</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
             {loading && (
               <div className="space-y-2">
                 <Progress value={progress} className="h-2" />

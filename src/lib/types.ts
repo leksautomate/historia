@@ -55,6 +55,7 @@ export interface ProjectSettings {
   imageConcurrency: number;
   audioConcurrency: number;
   historyMode: boolean;
+  splitMode?: "smart" | "exact";
 }
 
 export interface Project {
