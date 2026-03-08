@@ -60,11 +60,12 @@ export async function createProjectFrontend(
     settings: {
       imageProvider: settings.imageProvider,
       ttsProvider: settings.ttsProvider,
-      voiceId: settings.voiceId,
+      voiceId: options.voiceId || settings.voiceId,
       modelId: settings.modelId,
       imageConcurrency: settings.imageConcurrency,
       audioConcurrency: settings.audioConcurrency,
       historyMode: true,
+      splitMode: options.splitMode || "smart",
     },
     style_summary: DEFAULT_STYLE_SUMMARY,
     stats: { sceneCount: 0, imagesCompleted: 0, audioCompleted: 0, imagesFailed: 0, audioFailed: 0, needsReviewCount: 0 },
