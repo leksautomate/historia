@@ -9,6 +9,7 @@ import Projects from "./pages/Projects";
 import ProjectStatus from "./pages/ProjectStatus";
 import ProjectPreview from "./pages/ProjectPreview";
 import Settings from "./pages/Settings";
+import ErrorLog from "./pages/ErrorLog";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -26,6 +27,7 @@ const App = () => (
             <Route path="/projects/:projectId" element={<ProjectStatus />} />
             <Route path="/projects/:projectId/preview" element={<ProjectPreview />} />
             <Route path="/settings" element={<Settings />} />
+            <Route path="/errors" element={<ErrorLog />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </AppLayout>
