@@ -61,14 +61,9 @@ export default function Settings() {
     if (!settings.whiskCookie) { setWhiskStatus("error"); setWhiskMsg("No cookie provided"); return; }
     setWhiskStatus("checking"); setWhiskMsg("");
     try {
-      const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
-      const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
-      const res = await fetch(`${SUPABASE_URL}/functions/v1/whisk-proxy`, {
+      const res = await fetch(`/api/whisk-proxy`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${SUPABASE_KEY}`,
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "session", cookie: settings.whiskCookie }),
       });
       if (!res.ok) { setWhiskStatus("error"); setWhiskMsg(`Proxy error: HTTP ${res.status}`); return; }

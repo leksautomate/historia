@@ -203,15 +203,11 @@ export async function generateSceneManifest(
 // Whisk — Image generation
 // ========================
 
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
-const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
-
 async function whiskProxy(body: any): Promise<any> {
-  const res = await fetch(`${SUPABASE_URL}/functions/v1/whisk-proxy`, {
+  const res = await fetch(`/api/whisk-proxy`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${SUPABASE_KEY}`,
     },
     body: JSON.stringify(body),
   });
@@ -292,8 +288,7 @@ async function fetchStyleBlob(projectId: string, filename: string): Promise<Blob
 }
 
 function getStyleRefUrl(projectId: string, filename: string): string {
-  const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
-  return `${SUPABASE_URL}/storage/v1/object/public/project-assets/${projectId}/style/${filename}`;
+  return `/api/assets/${projectId}/style/${filename}`;
 }
 
 export async function generateWhiskImage(

@@ -1,5 +1,4 @@
 import { useEffect, useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -40,54 +39,45 @@ export default function ErrorLog() {
 
   const fetchErrors = async () => {
     setLoading(true);
-    const { data: scenes } = await supabase
-      .from("scenes")
-      .select("id, project_id, scene_number, image_status, audio_status, image_error, audio_error, image_attempts, audio_attempts, updated_at")
-      .or("image_status.eq.failed,audio_status.eq.failed")
-      .order("updated_at", { ascending: false });
+    try {
+      const allProjects: any[] = await fetch("/api/projects").then(r => r.json());
+      const entries: ErrorEntry[] = [];
 
-    if (!scenes) { setLoading(false); return; }
-
-    // Fetch project titles
-    const projectIds = [...new Set(scenes.map(s => s.project_id))];
-    const { data: projects } = await supabase
-      .from("projects")
-      .select("id, title")
-      .in("id", projectIds);
-
-    const titleMap: Record<string, string> = {};
-    projects?.forEach(p => { titleMap[p.id] = p.title; });
-
-    const entries: ErrorEntry[] = [];
-    for (const s of scenes) {
-      if (s.image_status === "failed" && s.image_error) {
-        entries.push({
-          id: `${s.id}-img`,
-          project_id: s.project_id,
-          project_title: titleMap[s.project_id] || s.project_id,
-          scene_number: s.scene_number,
-          type: "image",
-          error: s.image_error,
-          attempts: s.image_attempts,
-          updated_at: s.updated_at,
-        });
+      for (const proj of allProjects) {
+        const { scenes } = await fetch(`/api/projects/${proj.id}`).then(r => r.json());
+        for (const s of (scenes || [])) {
+          if (s.image_status === "failed" && s.image_error) {
+            entries.push({
+              id: `${s.id}-img`,
+              project_id: s.project_id,
+              project_title: proj.title,
+              scene_number: s.scene_number,
+              type: "image",
+              error: s.image_error,
+              attempts: s.image_attempts,
+              updated_at: s.updated_at,
+            });
+          }
+          if (s.audio_status === "failed" && s.audio_error) {
+            entries.push({
+              id: `${s.id}-aud`,
+              project_id: s.project_id,
+              project_title: proj.title,
+              scene_number: s.scene_number,
+              type: "audio",
+              error: s.audio_error,
+              attempts: s.audio_attempts,
+              updated_at: s.updated_at,
+            });
+          }
+        }
       }
-      if (s.audio_status === "failed" && s.audio_error) {
-        entries.push({
-          id: `${s.id}-aud`,
-          project_id: s.project_id,
-          project_title: titleMap[s.project_id] || s.project_id,
-          scene_number: s.scene_number,
-          type: "audio",
-          error: s.audio_error,
-          attempts: s.audio_attempts,
-          updated_at: s.updated_at,
-        });
-      }
+
+      entries.sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime());
+      setErrors(entries);
+    } catch (e) {
+      console.error("Failed to fetch errors:", e);
     }
-
-    entries.sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime());
-    setErrors(entries);
     setLoading(false);
   };
 

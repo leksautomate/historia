@@ -3,7 +3,6 @@ import { useParams, Link } from "react-router-dom";
 import { getProject, getAssetUrl, regenerateAssetFrontend } from "@/lib/api";
 import { regenerateImagePrompt } from "@/lib/providers";
 import type { Scene } from "@/lib/types";
-import { supabase } from "@/integrations/supabase/client";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -150,9 +149,12 @@ export default function ProjectPreview() {
   const savePrompt = async () => {
     if (!projectId || !scene) return;
     setSaving(true);
-    const { error } = await supabase.from("scenes").update({ image_prompt: editPrompt })
-      .eq("project_id", projectId).eq("scene_number", scene.scene_number);
-    if (error) toast.error(error.message);
+    const res = await fetch(`/api/projects/${projectId}/scenes/${scene.scene_number}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ image_prompt: editPrompt }),
+    });
+    if (!res.ok) { const e = await res.json(); toast.error(e.error); }
     else { toast.success("Prompt saved"); fetchData(); }
     setSaving(false);
   };
@@ -174,8 +176,11 @@ export default function ProjectPreview() {
     if (!projectId || !scene) return;
     // Save prompt first if changed
     if (editPrompt !== scene.image_prompt) {
-      await supabase.from("scenes").update({ image_prompt: editPrompt })
-        .eq("project_id", projectId).eq("scene_number", scene.scene_number);
+      await fetch(`/api/projects/${projectId}/scenes/${scene.scene_number}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ image_prompt: editPrompt }),
+      });
     }
     setRegenImage(true);
     try {

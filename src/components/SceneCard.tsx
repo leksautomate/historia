@@ -9,7 +9,6 @@ import { INWORLD_VOICES } from "@/lib/providers";
 import type { Scene } from "@/lib/types";
 import AudioPlayer from "@/components/AudioPlayer";
 import SplitSceneDialog from "@/components/SplitSceneDialog";
-import { supabase } from "@/integrations/supabase/client";
 import {
   Image as ImageIcon, Volume2, RefreshCw, AlertTriangle, CheckCircle2,
   Clock, Copy, Loader2, Pencil, Save, X, Scissors,
@@ -56,9 +55,12 @@ export default function SceneCard({ scene, projectId, onRefresh }: Props) {
   const saveEdit = async () => {
     if (!editingField) return;
     const col = editingField === "script" ? "script_text" : editingField === "tts" ? "tts_text" : "image_prompt";
-    const { error } = await supabase.from("scenes").update({ [col]: editValue })
-      .eq("project_id", projectId).eq("scene_number", scene.scene_number);
-    if (error) { toast.error(error.message); return; }
+    const res = await fetch(`/api/projects/${projectId}/scenes/${scene.scene_number}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ [col]: editValue }),
+    });
+    if (!res.ok) { const e = await res.json(); toast.error(e.error); return; }
     toast.success("Saved");
     setEditingField(null);
     onRefresh();
@@ -66,8 +68,11 @@ export default function SceneCard({ scene, projectId, onRefresh }: Props) {
 
   const handleVoiceChange = async (v: string) => {
     setVoiceId(v);
-    await supabase.from("scenes").update({ voice_id: v } as any)
-      .eq("project_id", projectId).eq("scene_number", scene.scene_number);
+    await fetch(`/api/projects/${projectId}/scenes/${scene.scene_number}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ voice_id: v }),
+    });
     toast.success(`Voice set to ${v}`);
   };
 
