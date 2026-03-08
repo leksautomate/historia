@@ -5,6 +5,7 @@ import { eq, desc, or, gt } from "drizzle-orm";
 import multer from "multer";
 import path from "path";
 import fs from "fs";
+import { generateWhiskImageWithRefs, getStyleImagePaths } from "../lib/whisk";
 
 const router = Router();
 
@@ -254,10 +255,11 @@ async function runProjectPipeline(
         if (imageProvider === "whisk") {
           const cookie = process.env.WHISK_COOKIE;
           if (!cookie) throw new Error("WHISK_COOKIE not configured");
+          const stylePaths = getStyleImagePaths(projectId);
           const allPrompts = [scene.image_prompt, ...(scene.fallback_prompts || [])];
           let bytes: Uint8Array | null = null;
           for (const prompt of allPrompts) {
-            try { bytes = await generateWhiskImage(prompt, cookie); break; } catch (e: any) { console.error(`Whisk prompt failed: ${e.message}`); }
+            try { bytes = await generateWhiskImageWithRefs(prompt, cookie, stylePaths); break; } catch (e: any) { console.error(`Whisk prompt failed: ${e.message}`); }
           }
           if (!bytes) throw new Error("All Whisk prompts failed");
           fs.writeFileSync(path.join(imgDir, `${num}.png`), bytes);
@@ -341,35 +343,6 @@ Return ONLY valid JSON matching this schema: {"scenes": [...]}`;
   return JSON.parse(content).scenes || [];
 }
 
-async function generateWhiskImage(prompt: string, cookie: string): Promise<Uint8Array> {
-  const sessionRes = await fetch("https://labs.google/fx/api/auth/session", { headers: { cookie } });
-  if (!sessionRes.ok) throw new Error(`Whisk session failed: ${sessionRes.status}`);
-  const session = await sessionRes.json();
-  const accessToken = session?.access_token;
-  if (!accessToken) throw new Error("No access_token in Whisk session");
-
-  const genRes = await fetch("https://aisandbox-pa.googleapis.com/v1:runImageFx", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
-    body: JSON.stringify({
-      userInput: { candidatesCount: 1, prompts: [prompt] },
-      generationParams: { seed: null },
-      clientContext: { tool: "WHISK" },
-      modelInput: { modelNameType: "IMAGEN_3_5" },
-      aspectRatio: "LANDSCAPE",
-    }),
-  });
-
-  if (!genRes.ok) throw new Error(`Whisk generation failed: ${genRes.status}`);
-  const genData = await genRes.json();
-  const encodedImage = genData?.imagePanels?.[0]?.generatedImages?.[0]?.encodedImage;
-  if (!encodedImage) throw new Error("No image in Whisk response");
-
-  const binary = atob(encodedImage);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-  return bytes;
-}
 
 async function generateInworldAudio(text: string, apiKey: string, voiceId: string, modelId: string): Promise<Buffer> {
   const res = await fetch("https://api.inworld.ai/tts/v1/voice", {
