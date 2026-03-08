@@ -157,25 +157,40 @@ export async function generateSceneManifest(
 // Whisk — Image generation
 // ========================
 
-// Upload an image to Whisk and get a media generation ID for use as a reference
-async function uploadToWhisk(imageBlob: Blob, cookie: string, accessToken: string): Promise<string> {
-  const base64 = await blobToBase64(imageBlob);
-  const uploadRes = await fetch("https://labs.google/fx/api/trpc/backbone.uploadImage", {
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+
+async function whiskProxy(body: any): Promise<any> {
+  const res = await fetch(`${SUPABASE_URL}/functions/v1/whisk-proxy`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      cookie,
+      Authorization: `Bearer ${SUPABASE_KEY}`,
     },
-    body: JSON.stringify({
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const errText = await res.text();
+    throw new Error(`Whisk proxy error (HTTP ${res.status}): ${errText.substring(0, 200)}`);
+  }
+  return res.json();
+}
+
+// Upload an image to Whisk and get a media generation ID for use as a reference
+async function uploadToWhisk(imageBlob: Blob, cookie: string, accessToken: string): Promise<string> {
+  const base64 = await blobToBase64(imageBlob);
+  const result = await whiskProxy({
+    action: "upload",
+    cookie,
+    payload: {
       json: {
         imageBytes: base64,
         mimeType: imageBlob.type || "image/png",
       },
-    }),
+    },
   });
-  if (!uploadRes.ok) throw new Error(`Whisk upload failed: ${uploadRes.status}`);
-  const uploadData = await uploadRes.json();
-  const mediaId = uploadData?.result?.data?.json?.mediaGenerationId;
+  if (result.status && result.status >= 400) throw new Error(`Whisk upload failed: ${result.status}`);
+  const mediaId = result?.data?.result?.data?.json?.mediaGenerationId;
   if (!mediaId) throw new Error("No mediaGenerationId from Whisk upload");
   return mediaId;
 }
