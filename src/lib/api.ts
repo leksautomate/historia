@@ -225,7 +225,8 @@ export async function createProjectFrontend(
 export async function regenerateAssetFrontend(
   projectId: string,
   sceneNumber: number,
-  type: "image" | "audio"
+  type: "image" | "audio",
+  voiceOverride?: string
 ): Promise<void> {
   const settings = loadProviderSettings();
 
