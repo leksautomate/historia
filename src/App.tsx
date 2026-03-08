@@ -10,6 +10,7 @@ import ProjectStatus from "./pages/ProjectStatus";
 import ProjectPreview from "./pages/ProjectPreview";
 import Settings from "./pages/Settings";
 import ErrorLog from "./pages/ErrorLog";
+import TextSplitter from "./pages/TextSplitter";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -28,6 +29,7 @@ const App = () => (
             <Route path="/projects/:projectId/preview" element={<ProjectPreview />} />
             <Route path="/settings" element={<Settings />} />
             <Route path="/errors" element={<ErrorLog />} />
+            <Route path="/text-splitter" element={<TextSplitter />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </AppLayout>
