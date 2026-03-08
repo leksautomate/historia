@@ -46,6 +46,12 @@ Historia automates the production pipeline for historical documentary content:
 - **Per-scene voice** — override the default voice for individual scenes
 - **Image & audio regeneration** — regenerate individual assets with updated prompts
 
+### Smart Text Splitter
+- **Smart mode** — keeps sentences together, breaks at natural punctuation (periods, commas, colons, semicolons)
+- **Exact mode** — strict word-count splitting for precise control
+- **Configurable tolerance** — allow parts to be slightly shorter or longer for natural breaks
+- **Copy & download** — copy individual parts or download all as a `.txt` file
+
 ### Settings & Health Checks
 - **API connection testing** — test each provider (Groq, Whisk, Inworld) with one click
 - **Green/red status indicators** — instant visual feedback with detailed error messages
@@ -112,6 +118,8 @@ Use the **"Test All Connections"** button to verify each key works.
 | `/projects/:id` | Project status, stats, scene cards |
 | `/projects/:id/preview` | Cinematic preview player |
 | `/settings` | API keys, provider config, health checks |
+| `/errors` | Error log viewer |
+| `/text-splitter` | Smart text splitter — split by sentences or exact word count |
 
 ## Error Handling
 
@@ -146,7 +154,9 @@ The app provides contextual error messages for common failure scenarios:
 │   │   ├── Projects.tsx
 │   │   ├── ProjectStatus.tsx
 │   │   ├── ProjectPreview.tsx # Cinematic preview player
-│   │   └── Settings.tsx      # Config + health checks
+│   │   ├── Settings.tsx      # Config + health checks
+│   │   ├── ErrorLog.tsx      # Error log viewer
+│   │   └── TextSplitter.tsx  # Smart text splitter utility
 │   └── integrations/
 │       └── supabase/         # Auto-generated client
 └── supabase/
