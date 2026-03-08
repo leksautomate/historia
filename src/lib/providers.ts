@@ -204,28 +204,59 @@ async function whiskProxy(body: any): Promise<any> {
   return res.json();
 }
 
+// Create a Whisk project/workflow and return the workflowId
+async function createWhiskProject(cookie: string): Promise<string> {
+  const result = await whiskProxy({
+    action: "create-project",
+    cookie,
+    payload: { name: "Historia-" + Date.now() },
+  });
+  if (result.status && result.status >= 400) {
+    throw new Error(`Whisk create-project failed (${result.status}): ${JSON.stringify(result.data).substring(0, 300)}`);
+  }
+  const workflowId = result.data?.workflowId;
+  if (!workflowId) throw new Error(`No workflowId from Whisk. Response: ${JSON.stringify(result.data).substring(0, 300)}`);
+  return workflowId;
+}
+
+// Caption an image via Whisk's backbone.captionImage
+async function captionWhiskImage(
+  rawBytes: string,
+  mediaCategory: string,
+  workflowId: string,
+  cookie: string
+): Promise<string> {
+  const result = await whiskProxy({
+    action: "caption-image",
+    cookie,
+    payload: { rawBytes, mediaCategory, workflowId },
+  });
+  if (result.status && result.status >= 400) {
+    console.warn(`Whisk caption failed (${result.status}), using empty caption`);
+    return "";
+  }
+  const caption = result.data?.candidates?.[0]?.output || "";
+  return caption;
+}
+
 // Upload an image to Whisk and get a media generation ID for use as a reference
-async function uploadToWhisk(imageBlob: Blob, cookie: string, accessToken: string): Promise<string> {
-  const base64 = await blobToBase64(imageBlob);
+async function uploadToWhisk(
+  rawBytes: string,
+  caption: string,
+  mediaCategory: string,
+  workflowId: string,
+  cookie: string
+): Promise<string> {
   const result = await whiskProxy({
     action: "upload",
     cookie,
-    payload: {
-      "0": {
-        json: {
-          imageBytes: base64,
-          mimeType: imageBlob.type || "image/png",
-        },
-      },
-    },
+    payload: { rawBytes, caption, mediaCategory, workflowId },
   });
-  if (result.status && result.status >= 400) throw new Error(`Whisk upload failed (${result.status}): ${JSON.stringify(result.data).substring(0, 300)}`);
-  // Handle both batched array response [{"result":{"data":{"json":...}}}] and direct response
-  const batchItem = Array.isArray(result.data) ? result.data[0] : result.data;
-  const mediaId = batchItem?.result?.data?.json?.mediaGenerationId
-    || batchItem?.data?.json?.mediaGenerationId
-    || result?.data?.result?.data?.json?.mediaGenerationId;
-  if (!mediaId) throw new Error(`No mediaGenerationId from Whisk upload. Response: ${JSON.stringify(result.data).substring(0, 300)}`);
+  if (result.status && result.status >= 400) {
+    throw new Error(`Whisk upload failed (${result.status}): ${JSON.stringify(result.data).substring(0, 300)}`);
+  }
+  const mediaId = result.data?.uploadMediaGenerationId;
+  if (!mediaId) throw new Error(`No uploadMediaGenerationId from Whisk. Response: ${JSON.stringify(result.data).substring(0, 300)}`);
   return mediaId;
 }
 
