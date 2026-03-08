@@ -60,7 +60,7 @@ export function saveProviderSettings(settings: ProviderSettings) {
 // Groq — Scene manifest generation
 // ========================
 
-const SCENE_SYSTEM_PROMPT = `You are a cinematic scene breakdown specialist for historical documentary content.
+const SCENE_SYSTEM_PROMPT_SMART = `You are a cinematic scene breakdown specialist for historical documentary content.
 
 Given a title, script, and style summary, split the script into visual narrative scenes.
 
@@ -73,8 +73,24 @@ CRITICAL STYLE CONSISTENCY RULES:
 - Reference the uploaded style images by describing their visual qualities (texture, color grading, composition style) in the style anchor.
 
 Rules:
-- Create 1 scene per 2-4 sentences, splitting when location, action, or emotional beat changes
-- Keep scene_number sequential from 1
+- Create 1 scene per 2-4 sentences, splitting when location, action, or emotional beat changes`;
+
+const SCENE_SYSTEM_PROMPT_EXACT = `You are a cinematic scene breakdown specialist for historical documentary content.
+
+Given a title, script, and style summary, split the script into visual narrative scenes.
+
+CRITICAL STYLE CONSISTENCY RULES:
+- Every image_prompt MUST begin with a style anchor block that describes the exact same visual style for ALL scenes. This ensures the AI image generator produces a visually cohesive set.
+- The style anchor block should be derived from the style summary and must appear VERBATIM at the start of every image_prompt. Format: "In the style of [palette], [lighting], [mood], [historicalLook]. "
+- After the style anchor, describe the specific scene content.
+- All characters must be described with the SAME consistent descriptors across scenes (e.g., if a ruler appears in scene 1 as "a tall bearded ruler in dark robes", use that EXACT description in every scene featuring that character).
+- Maintain consistent color palette, lighting quality, and artistic medium across all prompts.
+- Reference the uploaded style images by describing their visual qualities (texture, color grading, composition style) in the style anchor.
+
+Rules:
+- Create 1 scene per paragraph boundary. Each paragraph in the script becomes its own scene.`;
+
+const SCENE_SYSTEM_PROMPT_COMMON = `- Keep scene_number sequential from 1
 - Keep people anonymous - use generic roles (ruler, soldier, merchant, monk, peasant) but give them CONSISTENT physical descriptions throughout
 - No celebrity likenesses
 - Generate cinematic, realistic, documentary-like image prompts
