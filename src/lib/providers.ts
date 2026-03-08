@@ -130,7 +130,7 @@ export async function generateSceneManifest(
   styleSummary: any,
   groqApiKey: string
 ): Promise<SceneManifest[]> {
-  const userPrompt = `Title: ${title}\nMode: history\n\nStyle Summary:\n${JSON.stringify(styleSummary, null, 2)}\n\nFull Script:\n${script}\n\nSplit this into scenes. Return ONLY the JSON object.`;
+  const userPrompt = `Title: ${title}\nMode: history\n\nStyle Summary (use this to build the style anchor for ALL prompts):\n${JSON.stringify(styleSummary, null, 2)}\n\nFull Script:\n${script}\n\nSplit this into scenes. Every image_prompt and fallback_prompt MUST start with the same style anchor prefix. Return ONLY the JSON object.`;
 
   const result = await whiskProxy({
     action: "groq-chat",
@@ -154,6 +154,32 @@ export async function generateSceneManifest(
     if (result.status === 401) throw new Error("Groq API key is invalid. Update it in Settings.");
     throw new Error(`Groq API error (HTTP ${result.status}): ${errText.substring(0, 200)}`);
   }
+
+  const data = result.data;
+  let content = data?.choices?.[0]?.message?.content;
+  if (!content) throw new Error("No content from Groq");
+  content = content.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim();
+  const parsed = JSON.parse(content);
+  
+  // If the LLM returned a style_anchor, ensure every prompt includes it
+  const styleAnchor = parsed.style_anchor || "";
+  const scenes: SceneManifest[] = parsed.scenes || [];
+  
+  if (styleAnchor) {
+    for (const scene of scenes) {
+      if (!scene.image_prompt.includes(styleAnchor)) {
+        scene.image_prompt = `${styleAnchor} ${scene.image_prompt}`;
+      }
+      if (scene.fallback_prompts) {
+        scene.fallback_prompts = scene.fallback_prompts.map((p: string) =>
+          p.includes(styleAnchor) ? p : `${styleAnchor} ${p}`
+        );
+      }
+    }
+  }
+  
+  return scenes;
+}
 
   const data = result.data;
   let content = data?.choices?.[0]?.message?.content;
