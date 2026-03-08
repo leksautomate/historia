@@ -70,52 +70,57 @@ export default function Projects() {
       ) : (
         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
           {projects.map((p) => (
-            <Link key={p.id} to={`/projects/${p.id}`}>
-              <Card className="hover:border-primary/30 transition-colors cursor-pointer h-full">
-                <CardContent className="p-5 space-y-3">
-                  <div className="flex items-start justify-between">
-                    <h3 className="font-display text-foreground font-medium truncate">{p.title}</h3>
-                    <div className="flex items-center gap-2 shrink-0">
-                      <StatusBadge status={p.status} />
-                      <AlertDialog>
-                        <AlertDialogTrigger asChild>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-7 w-7 text-muted-foreground hover:text-destructive"
-                            onClick={(e) => e.preventDefault()}
-                          >
-                            {deleting === p.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
-                          </Button>
-                        </AlertDialogTrigger>
-                        <AlertDialogContent onClick={(e) => e.stopPropagation()}>
-                          <AlertDialogHeader>
-                            <AlertDialogTitle>Delete "{p.title}"?</AlertDialogTitle>
-                            <AlertDialogDescription>
-                              This will permanently delete the project, all scenes, and all generated assets. This action cannot be undone.
-                            </AlertDialogDescription>
-                          </AlertDialogHeader>
-                          <AlertDialogFooter>
-                            <AlertDialogCancel>Cancel</AlertDialogCancel>
-                            <AlertDialogAction onClick={(e) => handleDelete(e, p.id)} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-                              Delete
-                            </AlertDialogAction>
-                          </AlertDialogFooter>
-                        </AlertDialogContent>
-                      </AlertDialog>
+            <div key={p.id} className="relative">
+              <Link to={`/projects/${p.id}`} className="block h-full">
+                <Card className="hover:border-primary/30 transition-colors cursor-pointer h-full">
+                  <CardContent className="p-5 space-y-3">
+                    <div className="flex items-start justify-between">
+                      <h3 className="font-display text-foreground font-medium truncate">{p.title}</h3>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <StatusBadge status={p.status} />
+                        {/* Spacer for delete button */}
+                        <div className="h-7 w-7" />
+                      </div>
                     </div>
-                  </div>
-                  <div className="flex items-center gap-4 text-xs text-muted-foreground">
-                    <span>{p.stats.sceneCount} scenes</span>
-                    <span>{p.stats.imagesCompleted} images</span>
-                    <span>{p.stats.audioCompleted} audio</span>
-                  </div>
-                  <p className="text-xs text-muted-foreground">
-                    {new Date(p.created_at).toLocaleDateString()}
-                  </p>
-                </CardContent>
-              </Card>
-            </Link>
+                    <div className="flex items-center gap-4 text-xs text-muted-foreground">
+                      <span>{p.stats.sceneCount} scenes</span>
+                      <span>{p.stats.imagesCompleted} images</span>
+                      <span>{p.stats.audioCompleted} audio</span>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      {new Date(p.created_at).toLocaleDateString()}
+                    </p>
+                  </CardContent>
+                </Card>
+              </Link>
+              <div className="absolute top-5 right-5">
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                    >
+                      {deleting === p.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Delete "{p.title}"?</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        This will permanently delete the project, all scenes, and all generated assets. This action cannot be undone.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Cancel</AlertDialogCancel>
+                      <AlertDialogAction onClick={(e) => handleDelete(e, p.id)} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                        Delete
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+              </div>
+            </div>
           ))}
         </div>
       )}
