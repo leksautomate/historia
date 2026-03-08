@@ -86,9 +86,8 @@ export async function createProjectFrontend(
     );
   }
 
-  // 3. Generate scene manifest via Groq (style_summary from defaults for prompt generation)
-
-  // 4. Generate scene manifest via Groq
+  // 3. Generate scene manifest via Groq
+  const styleSummary = DEFAULT_STYLE_SUMMARY;
   callbacks.onPhase("Generating scene manifest via Groq...");
   if (!settings.groqApiKey) throw new Error("Groq API key not configured. Go to Settings to add it.");
 
