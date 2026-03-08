@@ -1,10 +1,11 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { Link } from "react-router-dom";
 import { getProjects, deleteProject } from "@/lib/api";
 import type { Project } from "@/lib/types";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Progress } from "@/components/ui/progress";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
@@ -15,7 +16,7 @@ import { toast } from "sonner";
 function StatusBadge({ status }: { status: string }) {
   const map: Record<string, { label: string; className: string }> = {
     created: { label: "Created", className: "bg-info/20 text-info border-info/30" },
-    processing: { label: "Processing", className: "bg-warning/20 text-warning border-warning/30" },
+    processing: { label: "Generating", className: "bg-warning/20 text-warning border-warning/30" },
     completed: { label: "Completed", className: "bg-success/20 text-success border-success/30" },
     partial: { label: "Partial", className: "bg-warning/20 text-warning border-warning/30" },
     failed: { label: "Failed", className: "bg-destructive/20 text-destructive border-destructive/30" },
@@ -25,14 +26,45 @@ function StatusBadge({ status }: { status: string }) {
   return <Badge className={s.className}>{s.label}</Badge>;
 }
 
+function ProjectProgress({ p }: { p: Project }) {
+  const total = (p.stats.sceneCount || 0) * 2;
+  const done = (p.stats.imagesCompleted || 0) + (p.stats.audioCompleted || 0);
+  const pct = total > 0 ? Math.round((done / total) * 100) : 0;
+  return (
+    <div className="space-y-1">
+      <div className="flex justify-between text-xs text-muted-foreground">
+        <span className="animate-pulse">Generating...</span>
+        <span>{p.stats.imagesCompleted}/{p.stats.sceneCount} images</span>
+      </div>
+      <Progress value={pct} className="h-1.5" />
+    </div>
+  );
+}
+
 export default function Projects() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
   const [deleting, setDeleting] = useState<string | null>(null);
 
-  useEffect(() => {
-    getProjects().then(setProjects).finally(() => setLoading(false));
+  const fetchProjects = useCallback(async () => {
+    try {
+      const data = await getProjects();
+      setProjects(data);
+    } finally {
+      setLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    fetchProjects();
+  }, [fetchProjects]);
+
+  useEffect(() => {
+    const hasProcessing = projects.some(p => p.status === "processing" || p.status === "created");
+    if (!hasProcessing) return;
+    const interval = setInterval(fetchProjects, 5000);
+    return () => clearInterval(interval);
+  }, [projects, fetchProjects]);
 
   const handleDelete = async (e: React.MouseEvent, projectId: string) => {
     e.preventDefault();
@@ -78,15 +110,18 @@ export default function Projects() {
                       <h3 className="font-display text-foreground font-medium truncate">{p.title}</h3>
                       <div className="flex items-center gap-2 shrink-0">
                         <StatusBadge status={p.status} />
-                        {/* Spacer for delete button */}
                         <div className="h-7 w-7" />
                       </div>
                     </div>
-                    <div className="flex items-center gap-4 text-xs text-muted-foreground">
-                      <span>{p.stats.sceneCount} scenes</span>
-                      <span>{p.stats.imagesCompleted} images</span>
-                      <span>{p.stats.audioCompleted} audio</span>
-                    </div>
+                    {(p.status === "processing" || p.status === "created") ? (
+                      <ProjectProgress p={p} />
+                    ) : (
+                      <div className="flex items-center gap-4 text-xs text-muted-foreground">
+                        <span>{p.stats.sceneCount} scenes</span>
+                        <span>{p.stats.imagesCompleted} images</span>
+                        <span>{p.stats.audioCompleted} audio</span>
+                      </div>
+                    )}
                     <p className="text-xs text-muted-foreground">
                       {new Date(p.created_at).toLocaleDateString()}
                     </p>

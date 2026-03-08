@@ -104,28 +104,40 @@ async function buildStyleEnhancedPrompt(
 }
 
 async function generateViaImageFx(prompt: string, accessToken: string): Promise<Uint8Array> {
-  const res = await fetch("https://aisandbox-pa.googleapis.com/v1:runImageFx", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
-    body: JSON.stringify({
-      userInput: { candidatesCount: 1, prompts: [prompt] },
-      generationParams: { seed: null },
-      clientContext: { tool: "WHISK" },
-      modelInput: { modelNameType: "IMAGEN_3_5" },
-      aspectRatio: "LANDSCAPE",
-    }),
-  });
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 30000);
+
+  let res: Response;
+  try {
+    res = await fetch("https://aisandbox-pa.googleapis.com/v1:runImageFx", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
+      signal: controller.signal,
+      body: JSON.stringify({
+        userInput: { candidatesCount: 1, prompts: [prompt], isExpandedPrompt: false },
+        clientContext: { tool: "IMAGE_FX" },
+        modelInput: { modelNameType: "IMAGEN_3_5" },
+        aspectRatio: "IMAGE_ASPECT_RATIO_LANDSCAPE",
+      }),
+    });
+  } finally {
+    clearTimeout(timeout);
+  }
 
   if (!res.ok) {
     const errText = await res.text();
+    console.error(`[whisk] ImageFx error ${res.status}: ${errText.substring(0, 500)}`);
     if (res.status === 429) throw new Error("Whisk rate limited — wait a minute and try again.");
     if (res.status === 401 || res.status === 403) throw new Error("Whisk auth expired. Update your Whisk Cookie.");
-    throw new Error(`Whisk generation failed (${res.status}): ${errText.substring(0, 200)}`);
+    throw new Error(`Whisk generation failed (${res.status}): ${errText.substring(0, 300)}`);
   }
 
   const genData = await res.json();
   const encodedImage = genData?.imagePanels?.[0]?.generatedImages?.[0]?.encodedImage;
-  if (!encodedImage) throw new Error("No image in Whisk response");
+  if (!encodedImage) {
+    console.error(`[whisk] No image in response:`, JSON.stringify(genData).substring(0, 300));
+    throw new Error("No image in Whisk response");
+  }
   return decodeEncodedImage(encodedImage);
 }
 

@@ -90,22 +90,8 @@ export async function createProjectFrontend(
   style2: File | null,
   options: { voiceId?: string; splitMode?: "smart" | "exact" },
   callbacks: PipelineCallbacks
-): Promise<string> {
+): Promise<{ projectId: string; serverPipeline: boolean; sceneCount: number }> {
   const settings = loadProviderSettings();
-  const projectId = generateProjectId();
-
-  callbacks.onPhase("Creating project...");
-
-  const formData = new FormData();
-  formData.append("title", title);
-  formData.append("script", script);
-  formData.append("imageProvider", settings.imageProvider);
-  formData.append("ttsProvider", settings.ttsProvider);
-  formData.append("voiceId", options.voiceId || settings.voiceId);
-  formData.append("modelId", settings.modelId);
-  formData.append("splitMode", options.splitMode || "smart");
-  if (style1) formData.append("style1", style1);
-  if (style2) formData.append("style2", style2);
 
   callbacks.onPhase("Generating scene manifest via Groq...");
   if (!settings.groqApiKey) throw new Error("Groq API key not configured. Go to Settings to add it.");
@@ -117,7 +103,18 @@ export async function createProjectFrontend(
     throw new Error(`Scene generation failed: ${e.message}`);
   }
 
-  callbacks.onPhase(`Inserting ${scenes.length} scenes...`);
+  callbacks.onPhase(`Creating project with ${scenes.length} scenes...`);
+
+  const formData = new FormData();
+  formData.append("title", title);
+  formData.append("script", script);
+  formData.append("imageProvider", settings.imageProvider);
+  formData.append("ttsProvider", settings.ttsProvider);
+  formData.append("voiceId", options.voiceId || settings.voiceId);
+  formData.append("modelId", settings.modelId);
+  formData.append("splitMode", options.splitMode || "smart");
+  if (style1) formData.append("style1", style1);
+  if (style2) formData.append("style2", style2);
 
   const serverProjectId = await fetch(`${API_BASE}/projects`, {
     method: "POST",
@@ -136,11 +133,16 @@ export async function createProjectFrontend(
     body: JSON.stringify({ scenes }),
   }).then(r => r.json()).catch(() => ({ success: true, serverPipeline: false }));
 
-  if (scenesRes.serverPipeline) {
-    callbacks.onPhase("Generating assets on server (background)...");
-    await pollUntilComplete(serverProjectId, scenes.length, callbacks);
-    return serverProjectId;
-  }
+  return { projectId: serverProjectId, serverPipeline: !!scenesRes.serverPipeline, sceneCount: scenes.length };
+}
+
+export async function runClientSidePipeline(
+  serverProjectId: string,
+  scenes: SceneManifest[],
+  options: { voiceId?: string },
+  callbacks: PipelineCallbacks
+): Promise<void> {
+  const settings = loadProviderSettings();
 
   callbacks.onPhase("Generating assets...");
 
@@ -155,7 +157,7 @@ export async function createProjectFrontend(
     const statusRes = await fetch(`${API_BASE}/projects/${serverProjectId}`).then(r => r.json()).catch(() => null);
     if (statusRes?.project?.status === "stopped") {
       callbacks.onPhase("Project stopped by user.");
-      return serverProjectId;
+      return;
     }
 
     const num = scene.scene_number;
@@ -254,8 +256,6 @@ export async function createProjectFrontend(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ status: finalStatus }),
   });
-
-  return serverProjectId;
 }
 
 export async function regenerateAssetFrontend(

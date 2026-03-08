@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
-import { getProject, getAssetUrl, getDownloadUrl, bulkRegenerateFailed, deleteProject, stopProject, resumeProject, type PipelineCallbacks } from "@/lib/api";
+import { getProject, getAssetUrl, getDownloadUrl, bulkRegenerateFailed, deleteProject, stopProject, resumeProject, runClientSidePipeline, type PipelineCallbacks } from "@/lib/api";
 import type { Project, Scene } from "@/lib/types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -18,6 +18,7 @@ import {
   CheckCircle2, Loader2, Scroll, RefreshCw, Play, Trash2, Square, RotateCw,
 } from "lucide-react";
 import { toast } from "sonner";
+import { loadProviderSettings } from "@/lib/providers";
 
 function StatusBadge({ status }: { status: string }) {
   const map: Record<string, { label: string; className: string }> = {
@@ -44,7 +45,9 @@ export default function ProjectStatus() {
   const [bulkProgress, setBulkProgress] = useState({ done: 0, total: 0 });
   const [isResuming, setIsResuming] = useState(false);
   const [isStopping, setIsStopping] = useState(false);
+  const [clientPipelineRunning, setClientPipelineRunning] = useState(false);
   const sceneRefs = useRef<Record<number, HTMLDivElement | null>>({});
+  const clientPipelineStarted = useRef(false);
 
   const fetchData = useCallback(async () => {
     if (!projectId) return;
@@ -62,11 +65,47 @@ export default function ProjectStatus() {
 
   useEffect(() => {
     fetchData();
-    const interval = setInterval(() => {
-      if (project?.status === "processing" || project?.status === "created") fetchData();
-    }, 3000);
+  }, [fetchData]);
+
+  useEffect(() => {
+    const isActive = project?.status === "processing" || project?.status === "created";
+    if (!isActive) return;
+    const interval = setInterval(fetchData, 3000);
     return () => clearInterval(interval);
   }, [fetchData, project?.status]);
+
+  useEffect(() => {
+    if (clientPipelineStarted.current) return;
+    if (!project || !projectId) return;
+    const isActive = project.status === "processing" || project.status === "created";
+    if (!isActive) return;
+    const allPending = scenes.length > 0 && scenes.every(s => s.image_status === "pending" && s.audio_status === "pending");
+    if (!allPending) return;
+
+    const settings = loadProviderSettings();
+    const canRunClient = !!(settings.whiskCookie || settings.inworldApiKey || settings.imageProvider === "mock");
+    if (!canRunClient) return;
+
+    clientPipelineStarted.current = true;
+    setClientPipelineRunning(true);
+    toast.info(`Starting generation for ${scenes.length} scenes...`);
+
+    const callbacks: PipelineCallbacks = {
+      onPhase: (phase) => console.log("[client-pipeline]", phase),
+      onSceneProgress: () => {},
+      onStats: () => {},
+    };
+
+    runClientSidePipeline(projectId, scenes as any, {}, callbacks)
+      .then(() => {
+        toast.success("Generation complete!");
+        fetchData();
+      })
+      .catch((err: any) => {
+        toast.error(`Generation failed: ${err.message}`);
+      })
+      .finally(() => setClientPipelineRunning(false));
+  }, [project, projectId, scenes, fetchData]);
 
   const scrollToScene = (num: number) => {
     setActiveScene(num);
@@ -179,7 +218,7 @@ export default function ProjectStatus() {
           </div>
           <div className="flex items-center gap-2">
             {/* Stop button */}
-            {(project.status === "processing" || isResuming) && (
+            {(project.status === "processing" || isResuming || clientPipelineRunning) && (
               <Button variant="outline" onClick={handleStop} disabled={isStopping}>
                 {isStopping ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Square className="h-4 w-4 mr-2" />}
                 Stop

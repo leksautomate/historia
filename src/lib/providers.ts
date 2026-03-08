@@ -60,67 +60,99 @@ export function saveProviderSettings(settings: ProviderSettings) {
 // Groq — Scene manifest generation
 // ========================
 
-const SCENE_SYSTEM_PROMPT_SMART = `You are a cinematic scene breakdown specialist for historical documentary content.
+const SCENE_SYSTEM_PROMPT_SMART = `You are a visual content director generating image prompts for YouTube history documentary videos.
 
-Given a title, script, and style summary, split the script into visual narrative scenes.
+You will receive a video title and full script. Your task is to split the script into cinematic scene prompts — one per clear narrative or emotional beat.
 
-CRITICAL STYLE CONSISTENCY RULES:
-- Every image_prompt MUST begin with a style anchor block that describes the exact same visual style for ALL scenes. This ensures the AI image generator produces a visually cohesive set.
-- The style anchor block should be derived from the style summary and must appear VERBATIM at the start of every image_prompt. Format: "In the style of [palette], [lighting], [mood], [historicalLook]. "
-- After the style anchor, describe the specific scene content.
-- All characters must be described with the SAME consistent descriptors across scenes (e.g., if a ruler appears in scene 1 as "a tall bearded ruler in dark robes", use that EXACT description in every scene featuring that character).
-- Maintain consistent color palette, lighting quality, and artistic medium across all prompts.
-- Reference the uploaded style images by describing their visual qualities (texture, color grading, composition style) in the style anchor.
+SCENE SPLITTING RULES (SMART MODE):
+- Create 1 scene per 2–4 sentences of the script
+- Create a new scene when: location/terrain shifts, battle phase changes, emotional register shifts, a new commander/perspective appears, a strategic decision occurs
+- Each scene represents one clear cinematic moment`;
 
-Rules:
-- Create 1 scene per 2-4 sentences, splitting when location, action, or emotional beat changes`;
+const SCENE_SYSTEM_PROMPT_EXACT = `You are a visual content director generating image prompts for YouTube history documentary videos.
 
-const SCENE_SYSTEM_PROMPT_EXACT = `You are a cinematic scene breakdown specialist for historical documentary content.
+You will receive a video title and full script. Your task is to split the script into cinematic scene prompts — one per paragraph.
 
-Given a title, script, and style summary, split the script into visual narrative scenes.
+SCENE SPLITTING RULES (EXACT MODE):
+- Create 1 scene per paragraph boundary
+- Each paragraph in the script becomes its own scene`;
 
-CRITICAL STYLE CONSISTENCY RULES:
-- Every image_prompt MUST begin with a style anchor block that describes the exact same visual style for ALL scenes. This ensures the AI image generator produces a visually cohesive set.
-- The style anchor block should be derived from the style summary and must appear VERBATIM at the start of every image_prompt. Format: "In the style of [palette], [lighting], [mood], [historicalLook]. "
-- After the style anchor, describe the specific scene content.
-- All characters must be described with the SAME consistent descriptors across scenes (e.g., if a ruler appears in scene 1 as "a tall bearded ruler in dark robes", use that EXACT description in every scene featuring that character).
-- Maintain consistent color palette, lighting quality, and artistic medium across all prompts.
-- Reference the uploaded style images by describing their visual qualities (texture, color grading, composition style) in the style anchor.
+const SCENE_SYSTEM_PROMPT_COMMON = `
+VISUAL STYLE — ALL PROMPTS MUST FOLLOW THIS:
+- Cinematic historical realism, photographic documentary, Caravaggio-level contrast
+- Images must feel like: film stills from a prestige historical epic, documentary reconstruction photography, high-end historical paintings brought to life
+- All scenes must look like real photography or prestige historical cinema — no fantasy, no video game look, no cartoon, no neon, no sci-fi, no modern elements
 
-Rules:
-- Create 1 scene per paragraph boundary. Each paragraph in the script becomes its own scene.`;
+PEOPLE — STRICT ANONYMITY RULES:
+- All figures must be anonymous: warriors, commanders, soldiers — never identifiable by face
+- Faces must be: obscured by helmets/hoods/shadow, turned away, silhouetted, or blurred by shallow depth of field
+- Represent characters through posture, armor, weapons, body language only
+- Whenever possible: show silhouettes against sky or fire, partial shadows from helmet, viewed from behind, seen through dust/smoke
 
-const SCENE_SYSTEM_PROMPT_COMMON = `- Keep scene_number sequential from 1
-- Keep people anonymous - use generic roles (ruler, soldier, merchant, monk, peasant) but give them CONSISTENT physical descriptions throughout
-- No celebrity likenesses
-- Generate cinematic, realistic, documentary-like image prompts
-- Convert abstract ideas into visible moments
-- Produce 3 fallback prompts per scene (each fallback must ALSO include the style anchor block)
+ENVIRONMENTS — must feel historically grounded, physically worn, dusty, sun-baked, or battle-scarred:
+open desert battlefields, rocky valley passes, ancient walled cities, command tents, riverbanks, mountain passes, burning villages, fortified hilltops, ancient harbors, throne rooms, siege lines
+Include period-accurate details: spears planted in ground, supply carts, water skins, banners and standards, wooden shields, campfires, stone walls, blood-stained earth
+
+LIGHTING OPTIONS — use variety across scenes:
+harsh midday sun with deep shadows, pre-dawn blue light before battle, torch and fire glow in night camps, dust-filtered golden sunlight, sunset silhouettes of armies, smoke-filtered combat light
+
+COLOR TONE: desaturated earth tones, bronze, iron, ochre, dust brown, deep reds and dark shadows, golden-hour warmth cut with darkness
+
+PROMPT STRUCTURE — each image_prompt must be exactly ONE sentence:
+[Who is present] + [what they are doing] + [where they are] + [camera angle/framing] + [lighting and mood]
+
+Every prompt MUST contain a CLEAR VISIBLE ACTION — never a static scene description.
+Strong actions: charging, kneeling in prayer, drawing sword, reading map by torchlight, receiving surrender, digging trenches, signaling retreat, binding a wound, rallying soldiers, crossing a river at night.
+
+CAMERA VARIETY — rotate between these framings (never repeat consecutive framings):
+- Close-up: hands, weapons, eyes, wounds, tools
+- Medium shot: individual warrior or commander, 50mm natural perspective
+- Wide shot: formations, terrain, armies, 24–35mm sweeping view
+- Over-the-shoulder command perspective
+- Ground-level looking up at advancing forces
+- High angle showing scale and positioning
+- Behind-the-back silhouette shots
+- Doorway or tent-entrance framing
+- Reflection in shield or water surface
+
+HISTORICAL PERIOD ACCURACY — match weapons, armor, environment to the period derived from the title and script:
+- Early Islamic warfare: chainmail, curved swords, Arabian horses, desert terrain, leather shields, turbans over armor
+- Ancient Greek: bronze Corinthian helmets, round hoplon shields, spear formations, open hillsides
+- Mongol: composite bows on horseback, lamellar armor, open steppe, circular camp formations
+- Medieval Crusades: iron chainmail, long kite shields, siege towers, walled city backgrounds
+- Roman: lorica segmentata, rectangular scutum shields, formation marching, stone roads and fortifications
+
+STRICT RESTRICTIONS — NEVER include:
+- Text overlays, banners with readable text, labels or signs with legible writing
+- Celebrity names or real people with identifiable faces
+- Modern brands, fantasy/sci-fi/game aesthetics, neon colors, cartoon rendering
+
+RULES:
+- Keep scene_number sequential from 1
+- Keep people anonymous (generic roles: soldier, commander, ruler, warrior, monk, archer, cavalry, siege crew)
+- tts_text must be IDENTICAL to script_text — do not rephrase, rewrite, or summarize
 - Assign scene_type: character | location | crowd | battle_light | artifact | transition
-- Assign historical_period
+- Assign historical_period derived from the title/script context
 - Assign visual_priority: character | environment | object
 - image_file = {scene_number}.png, audio_file = {scene_number}.mp3
-- tts_text must be IDENTICAL to script_text — do not rephrase, rewrite, or summarize
-- All image prompts must end with style keywords like "cinematic realism, historical atmosphere, consistent art style"
-
-Replace famous individuals with generic descriptions:
-- anonymous ruler, military commander, court official, monk, merchant, soldier, peasant, noblewoman, worker, crowd of townspeople
-- Give each recurring character a FIXED visual description (age, build, clothing, distinguishing features) and reuse it exactly
+- Produce 3 fallback_prompts per scene — each must also be one complete cinematic sentence with a different camera angle than the main prompt
 
 Return ONLY valid JSON matching this exact schema:
 {
-  "style_anchor": "The exact style prefix used in all prompts, derived from style summary",
-  "character_descriptions": {"ruler": "tall bearded man in dark crimson robes, mid-50s", ...},
   "scenes": [
     {
       "scene_number": 1,
       "scene_type": "location",
       "historical_period": "ancient rome",
       "visual_priority": "environment",
-      "script_text": "original script chunk",
-      "tts_text": "narration text",
-      "image_prompt": "[style_anchor] detailed cinematic prompt with consistent character descriptions",
-      "fallback_prompts": ["[style_anchor] simpler prompt", "[style_anchor] environmental prompt", "[style_anchor] symbolic prompt"],
+      "script_text": "original script chunk verbatim",
+      "tts_text": "identical to script_text",
+      "image_prompt": "One complete cinematic sentence following the prompt structure above, ending with a period.",
+      "fallback_prompts": [
+        "Fallback with different camera angle, one sentence, ending with a period.",
+        "Fallback focusing on environment, one sentence, ending with a period.",
+        "Fallback symbolic/aftermath angle, one sentence, ending with a period."
+      ],
       "image_file": "1.png",
       "audio_file": "1.mp3"
     }
@@ -148,7 +180,7 @@ export async function generateSceneManifest(
   splitMode: "smart" | "exact" = "smart"
 ): Promise<SceneManifest[]> {
   const systemPrompt = (splitMode === "exact" ? SCENE_SYSTEM_PROMPT_EXACT : SCENE_SYSTEM_PROMPT_SMART) + "\n" + SCENE_SYSTEM_PROMPT_COMMON;
-  const userPrompt = `Title: ${title}\nMode: history\n\nStyle Summary (use this to build the style anchor for ALL prompts):\n${JSON.stringify(styleSummary, null, 2)}\n\nFull Script:\n${script}\n\nSplit this into scenes. Every image_prompt and fallback_prompt MUST start with the same style anchor prefix. Return ONLY the JSON object.`;
+  const userPrompt = `Video Title: ${title}\n\nFull Script:\n${script}\n\nGenerate the scene manifest now. Return ONLY the JSON object.`;
 
   const result = await whiskProxy({
     action: "groq-chat",
@@ -178,24 +210,7 @@ export async function generateSceneManifest(
   if (!content) throw new Error("No content from Groq");
   content = content.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim();
   const parsed = JSON.parse(content);
-  
-  // If the LLM returned a style_anchor, ensure every prompt includes it
-  const styleAnchor = parsed.style_anchor || "";
   const scenes: SceneManifest[] = parsed.scenes || [];
-  
-  if (styleAnchor) {
-    for (const scene of scenes) {
-      if (!scene.image_prompt.includes(styleAnchor)) {
-        scene.image_prompt = `${styleAnchor} ${scene.image_prompt}`;
-      }
-      if (scene.fallback_prompts) {
-        scene.fallback_prompts = scene.fallback_prompts.map((p: string) =>
-          p.includes(styleAnchor) ? p : `${styleAnchor} ${p}`
-        );
-      }
-    }
-  }
-  
   return scenes;
 }
 
@@ -341,11 +356,10 @@ export async function generateWhiskImage(
     action: "generate",
     accessToken,
     payload: {
-      userInput: { candidatesCount: 1, prompts: [enhancedPrompt] },
-      generationParams: { seed: null },
-      clientContext: { tool: "WHISK" },
+      userInput: { candidatesCount: 1, prompts: [enhancedPrompt], isExpandedPrompt: false },
+      clientContext: { tool: "IMAGE_FX" },
       modelInput: { modelNameType: "IMAGEN_3_5" },
-      aspectRatio: "LANDSCAPE",
+      aspectRatio: "IMAGE_ASPECT_RATIO_LANDSCAPE",
     },
   });
 
@@ -430,17 +444,8 @@ export async function generateInworldAudio(
 export async function regenerateImagePrompt(
   scriptText: string,
   groqApiKey: string,
-  styleSummary?: any
+  _styleSummary?: any
 ): Promise<string> {
-  const style = styleSummary || {
-    palette: "desaturated, muted, slightly dark, historical documentary tone",
-    lighting: "natural window light, candlelight, torchlight, overcast daylight",
-    framing: "wide establishing shots, over-the-shoulder views, close details",
-    people: "anonymous figures, obscured faces, silhouettes, backs turned",
-    mood: "tense, reflective, investigative, cinematic",
-    historicalLook: "realistic period atmosphere, grounded environments",
-  };
-
   const result = await whiskProxy({
     action: "groq-chat",
     apiKey: groqApiKey,
@@ -449,16 +454,30 @@ export async function regenerateImagePrompt(
       messages: [
         {
           role: "system",
-          content: `You are an expert at writing image generation prompts for historical documentary scenes. Given a script text and style guide, produce a single detailed cinematic image prompt. 
+          content: `You are a visual content director generating a single image prompt for a YouTube history documentary scene.
 
-CRITICAL: Start the prompt with a style anchor derived from the style guide (palette, lighting, mood, medium). This ensures visual consistency with other scenes in the project. Keep people anonymous (no names/faces) but give them consistent physical descriptions. End with style keywords. Return ONLY the prompt text, no JSON or markdown.`,
+PROMPT STRUCTURE (exactly one sentence):
+[Who is present] + [what they are doing] + [where they are] + [camera angle/framing] + [lighting and mood]
+
+STYLE RULES:
+- Cinematic historical realism, photographic documentary, Caravaggio-level contrast
+- All figures anonymous: silhouettes, backs turned, faces obscured by helmets/hoods/shadow/dust
+- Historically grounded environments: dusty, sun-baked, battle-scarred, period-accurate details
+- Clear visible action — never a static description
+- Camera options: close-up of hands/weapons, medium shot, wide battlefield, over-the-shoulder, ground-level, high angle, silhouette shot
+- Lighting: harsh midday sun, pre-dawn blue, torch/fire glow, dust-filtered gold, sunset silhouette
+- Color: desaturated earth tones, bronze, ochre, dust brown, deep reds
+
+RESTRICTIONS: No text overlays, no identifiable faces, no fantasy/sci-fi/modern elements.
+
+Return ONLY the prompt text — one sentence ending with a period. No JSON, no markdown, no explanation.`,
         },
         {
           role: "user",
-          content: `Script: ${scriptText}\n\nStyle Guide:\n${JSON.stringify(style, null, 2)}\n\nGenerate one detailed image prompt that starts with a style anchor prefix matching this style guide.`,
+          content: `Script text to visualize:\n${scriptText}\n\nGenerate one cinematic image prompt for this scene.`,
         },
       ],
-      temperature: 0.4,
+      temperature: 0.5,
     },
   });
 

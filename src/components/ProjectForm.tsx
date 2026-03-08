@@ -38,36 +38,32 @@ export default function ProjectForm() {
     }
 
     setLoading(true);
-    setPhase("Starting...");
+    setPhase("Generating scene manifest...");
     setProgress(0);
 
     try {
-      const projectId = await createProjectFrontend(
+      const { projectId, serverPipeline, sceneCount } = await createProjectFrontend(
         title.trim(),
         script.trim(),
         style1,
         style2,
-        {
-          voiceId,
-          splitMode,
-        },
+        { voiceId, splitMode },
         {
           onPhase: (p) => setPhase(p),
-          onSceneProgress: (num, type, status) => {
-            setPhase(`Scene ${num}: ${type} ${status}`);
-          },
-          onStats: (stats) => {
-            const done = stats.imagesCompleted + stats.audioCompleted + stats.imagesFailed + stats.audioFailed;
-            const total = stats.total * 2;
-            setProgress(total > 0 ? (done / total) * 100 : 0);
-          },
+          onSceneProgress: () => {},
+          onStats: () => {},
         }
       );
-      toast.success("Project created!");
+
+      if (serverPipeline) {
+        toast.success(`Project created! ${sceneCount} scenes generating in background.`);
+      } else {
+        toast.success(`Project created with ${sceneCount} scenes. Generating assets...`);
+      }
+
       navigate(`/projects/${projectId}`);
     } catch (e: any) {
       toast.error(e.message || "Failed to create project");
-    } finally {
       setLoading(false);
       setPhase("");
       setProgress(0);

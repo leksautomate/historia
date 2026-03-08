@@ -285,6 +285,10 @@ async function runAssetPipeline(projectId: string) {
       await db.update(projects).set({
         stats: { sceneCount: sceneList.length, imagesCompleted, audioCompleted, imagesFailed, audioFailed, needsReviewCount: imagesFailed + audioFailed },
       }).where(eq(projects.id, projectId));
+
+      if (imageProvider === "whisk" && sceneList.indexOf(scene) < sceneList.length - 1) {
+        await new Promise(resolve => setTimeout(resolve, 2000));
+      }
     }
 
     const finalStatus = (imagesFailed > 0 || audioFailed > 0) ? "partial" : "completed";
