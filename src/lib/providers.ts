@@ -431,11 +431,13 @@ export async function regenerateImagePrompt(
       messages: [
         {
           role: "system",
-          content: `You are an expert at writing image generation prompts for historical documentary scenes. Given a script text and style guide, produce a single detailed cinematic image prompt. Keep people anonymous (no names/faces). End with style keywords. Return ONLY the prompt text, no JSON or markdown.`,
+          content: `You are an expert at writing image generation prompts for historical documentary scenes. Given a script text and style guide, produce a single detailed cinematic image prompt. 
+
+CRITICAL: Start the prompt with a style anchor derived from the style guide (palette, lighting, mood, medium). This ensures visual consistency with other scenes in the project. Keep people anonymous (no names/faces) but give them consistent physical descriptions. End with style keywords. Return ONLY the prompt text, no JSON or markdown.`,
         },
         {
           role: "user",
-          content: `Script: ${scriptText}\n\nStyle Guide:\n${JSON.stringify(style, null, 2)}\n\nGenerate one detailed image prompt.`,
+          content: `Script: ${scriptText}\n\nStyle Guide:\n${JSON.stringify(style, null, 2)}\n\nGenerate one detailed image prompt that starts with a style anchor prefix matching this style guide.`,
         },
       ],
       temperature: 0.4,
