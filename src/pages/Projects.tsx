@@ -83,7 +83,7 @@ export default function Projects() {
                             variant="ghost"
                             size="icon"
                             className="h-7 w-7 text-muted-foreground hover:text-destructive"
-                            onClick={(e) => e.preventDefault()}
+                            onClick={(e) => { e.stopPropagation(); e.preventDefault(); }}
                           >
                             {deleting === p.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
                           </Button>
