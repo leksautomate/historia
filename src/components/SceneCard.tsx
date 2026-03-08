@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { getAssetUrl, regenerateImage, regenerateAudio } from "@/lib/api";
 import type { Scene } from "@/lib/types";
+import AudioPlayer from "@/components/AudioPlayer";
 import {
   Image as ImageIcon,
   Volume2,
