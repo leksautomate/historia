@@ -141,7 +141,9 @@ export async function generateSceneManifest(
 
   if (!response.ok) {
     const errText = await response.text();
-    throw new Error(`Groq API error: ${response.status} - ${errText}`);
+    if (response.status === 429) throw new Error("Groq rate limited — wait a moment and try again.");
+    if (response.status === 401) throw new Error("Groq API key is invalid. Update it in Settings.");
+    throw new Error(`Groq API error (HTTP ${response.status}): ${errText.substring(0, 200)}`);
   }
 
   const data = await response.json();
@@ -211,11 +213,18 @@ export async function generateWhiskImage(
   // Step 1: Get auth token
   const sessionRes = await fetch("https://labs.google/fx/api/auth/session", {
     headers: { cookie },
+  }).catch((e) => {
+    throw new Error(`Whisk connection failed — this is likely a CORS issue. Whisk API calls must be made from a browser with the correct cookie. Details: ${e.message}`);
   });
-  if (!sessionRes.ok) throw new Error(`Whisk session failed: ${sessionRes.status}`);
+  if (sessionRes.status === 401 || sessionRes.status === 403) {
+    throw new Error("Whisk cookie expired or invalid. Go to Settings and update your Whisk Cookie (copy fresh from labs.google).");
+  }
+  if (!sessionRes.ok) {
+    throw new Error(`Whisk session failed (HTTP ${sessionRes.status}). Check your Whisk Cookie in Settings.`);
+  }
   const session = await sessionRes.json();
   const accessToken = session?.access_token;
-  if (!accessToken) throw new Error("No access_token in Whisk session");
+  if (!accessToken) throw new Error("No access_token in Whisk session — cookie may be expired. Update it in Settings.");
 
   // Step 2: Upload style reference images if provided
   const styleMediaIds: string[] = [];
@@ -267,7 +276,9 @@ export async function generateWhiskImage(
 
     if (!genRes.ok) {
       const errText = await genRes.text();
-      throw new Error(`Whisk recipe generation failed: ${genRes.status} - ${errText}`);
+      if (genRes.status === 429) throw new Error("Whisk rate limited — wait a minute and try again.");
+      if (genRes.status === 401 || genRes.status === 403) throw new Error("Whisk auth expired. Update your Whisk Cookie in Settings.");
+      throw new Error(`Whisk recipe generation failed (HTTP ${genRes.status}): ${errText.substring(0, 200)}`);
     }
 
     const genData = await genRes.json();
@@ -298,7 +309,9 @@ export async function generateWhiskImage(
 
     if (!genRes.ok) {
       const errText = await genRes.text();
-      throw new Error(`Whisk generation failed: ${genRes.status} - ${errText}`);
+      if (genRes.status === 429) throw new Error("Whisk rate limited — wait a minute and try again.");
+      if (genRes.status === 401 || genRes.status === 403) throw new Error("Whisk auth expired. Update your Whisk Cookie in Settings.");
+      throw new Error(`Whisk generation failed (HTTP ${genRes.status}): ${errText.substring(0, 200)}`);
     }
 
     const genData = await genRes.json();
@@ -340,7 +353,9 @@ export async function generateInworldAudio(
 
   if (!response.ok) {
     const errText = await response.text();
-    throw new Error(`Inworld TTS failed: ${response.status} - ${errText}`);
+    if (response.status === 429) throw new Error("Inworld rate limited — wait and retry.");
+    if (response.status === 401 || response.status === 403) throw new Error("Inworld API key is invalid. Update it in Settings.");
+    throw new Error(`Inworld TTS failed (HTTP ${response.status}): ${errText.substring(0, 200)}`);
   }
 
   const data = await response.json();
