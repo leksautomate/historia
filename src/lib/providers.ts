@@ -64,27 +64,37 @@ const SCENE_SYSTEM_PROMPT = `You are a cinematic scene breakdown specialist for 
 
 Given a title, script, and style summary, split the script into visual narrative scenes.
 
+CRITICAL STYLE CONSISTENCY RULES:
+- Every image_prompt MUST begin with a style anchor block that describes the exact same visual style for ALL scenes. This ensures the AI image generator produces a visually cohesive set.
+- The style anchor block should be derived from the style summary and must appear VERBATIM at the start of every image_prompt. Format: "In the style of [palette], [lighting], [mood], [historicalLook]. "
+- After the style anchor, describe the specific scene content.
+- All characters must be described with the SAME consistent descriptors across scenes (e.g., if a ruler appears in scene 1 as "a tall bearded ruler in dark robes", use that EXACT description in every scene featuring that character).
+- Maintain consistent color palette, lighting quality, and artistic medium across all prompts.
+- Reference the uploaded style images by describing their visual qualities (texture, color grading, composition style) in the style anchor.
+
 Rules:
 - Create 1 scene per 2-4 sentences, splitting when location, action, or emotional beat changes
 - Keep scene_number sequential from 1
-- Keep people anonymous - use generic roles (ruler, soldier, merchant, monk, peasant)
+- Keep people anonymous - use generic roles (ruler, soldier, merchant, monk, peasant) but give them CONSISTENT physical descriptions throughout
 - No celebrity likenesses
 - Generate cinematic, realistic, documentary-like image prompts
-- Maintain the exact style summary in every prompt
 - Convert abstract ideas into visible moments
-- Produce 3 fallback prompts per scene (progressively simpler)
+- Produce 3 fallback prompts per scene (each fallback must ALSO include the style anchor block)
 - Assign scene_type: character | location | crowd | battle_light | artifact | transition
 - Assign historical_period
 - Assign visual_priority: character | environment | object
 - image_file = {scene_number}.png, audio_file = {scene_number}.mp3
 - tts_text should be the narration for that scene
-- All image prompts must end with style keywords like "cinematic realism, historical atmosphere"
+- All image prompts must end with style keywords like "cinematic realism, historical atmosphere, consistent art style"
 
 Replace famous individuals with generic descriptions:
 - anonymous ruler, military commander, court official, monk, merchant, soldier, peasant, noblewoman, worker, crowd of townspeople
+- Give each recurring character a FIXED visual description (age, build, clothing, distinguishing features) and reuse it exactly
 
 Return ONLY valid JSON matching this exact schema:
 {
+  "style_anchor": "The exact style prefix used in all prompts, derived from style summary",
+  "character_descriptions": {"ruler": "tall bearded man in dark crimson robes, mid-50s", ...},
   "scenes": [
     {
       "scene_number": 1,
@@ -93,8 +103,8 @@ Return ONLY valid JSON matching this exact schema:
       "visual_priority": "environment",
       "script_text": "original script chunk",
       "tts_text": "narration text",
-      "image_prompt": "detailed cinematic prompt",
-      "fallback_prompts": ["simpler prompt", "environmental prompt", "symbolic prompt"],
+      "image_prompt": "[style_anchor] detailed cinematic prompt with consistent character descriptions",
+      "fallback_prompts": ["[style_anchor] simpler prompt", "[style_anchor] environmental prompt", "[style_anchor] symbolic prompt"],
       "image_file": "1.png",
       "audio_file": "1.mp3"
     }
@@ -120,7 +130,7 @@ export async function generateSceneManifest(
   styleSummary: any,
   groqApiKey: string
 ): Promise<SceneManifest[]> {
-  const userPrompt = `Title: ${title}\nMode: history\n\nStyle Summary:\n${JSON.stringify(styleSummary, null, 2)}\n\nFull Script:\n${script}\n\nSplit this into scenes. Return ONLY the JSON object.`;
+  const userPrompt = `Title: ${title}\nMode: history\n\nStyle Summary (use this to build the style anchor for ALL prompts):\n${JSON.stringify(styleSummary, null, 2)}\n\nFull Script:\n${script}\n\nSplit this into scenes. Every image_prompt and fallback_prompt MUST start with the same style anchor prefix. Return ONLY the JSON object.`;
 
   const result = await whiskProxy({
     action: "groq-chat",
@@ -149,7 +159,26 @@ export async function generateSceneManifest(
   let content = data?.choices?.[0]?.message?.content;
   if (!content) throw new Error("No content from Groq");
   content = content.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim();
-  return JSON.parse(content).scenes || [];
+  const parsed = JSON.parse(content);
+  
+  // If the LLM returned a style_anchor, ensure every prompt includes it
+  const styleAnchor = parsed.style_anchor || "";
+  const scenes: SceneManifest[] = parsed.scenes || [];
+  
+  if (styleAnchor) {
+    for (const scene of scenes) {
+      if (!scene.image_prompt.includes(styleAnchor)) {
+        scene.image_prompt = `${styleAnchor} ${scene.image_prompt}`;
+      }
+      if (scene.fallback_prompts) {
+        scene.fallback_prompts = scene.fallback_prompts.map((p: string) =>
+          p.includes(styleAnchor) ? p : `${styleAnchor} ${p}`
+        );
+      }
+    }
+  }
+  
+  return scenes;
 }
 
 // ========================
@@ -402,11 +431,13 @@ export async function regenerateImagePrompt(
       messages: [
         {
           role: "system",
-          content: `You are an expert at writing image generation prompts for historical documentary scenes. Given a script text and style guide, produce a single detailed cinematic image prompt. Keep people anonymous (no names/faces). End with style keywords. Return ONLY the prompt text, no JSON or markdown.`,
+          content: `You are an expert at writing image generation prompts for historical documentary scenes. Given a script text and style guide, produce a single detailed cinematic image prompt. 
+
+CRITICAL: Start the prompt with a style anchor derived from the style guide (palette, lighting, mood, medium). This ensures visual consistency with other scenes in the project. Keep people anonymous (no names/faces) but give them consistent physical descriptions. End with style keywords. Return ONLY the prompt text, no JSON or markdown.`,
         },
         {
           role: "user",
-          content: `Script: ${scriptText}\n\nStyle Guide:\n${JSON.stringify(style, null, 2)}\n\nGenerate one detailed image prompt.`,
+          content: `Script: ${scriptText}\n\nStyle Guide:\n${JSON.stringify(style, null, 2)}\n\nGenerate one detailed image prompt that starts with a style anchor prefix matching this style guide.`,
         },
       ],
       temperature: 0.4,
