@@ -30,6 +30,12 @@ export default function ProjectForm() {
       fd.append("script", script.trim());
       fd.append("style1", style1!);
       fd.append("style2", style2!);
+      // Pass image provider from settings
+      try {
+        const settings = JSON.parse(localStorage.getItem("historia-settings") || "{}");
+        if (settings.imageProvider) fd.append("imageProvider", settings.imageProvider);
+      } catch {}
+
       const projectId = await createProject(fd);
       toast.success("Project created! Generating scenes...");
       navigate(`/projects/${projectId}`);
