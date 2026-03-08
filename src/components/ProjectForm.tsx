@@ -6,8 +6,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { createProjectFrontend } from "@/lib/api";
-import { loadProviderSettings } from "@/lib/providers";
+import { loadProviderSettings, INWORLD_VOICES } from "@/lib/providers";
 import { Upload, Scroll, Loader2, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 
@@ -17,6 +18,8 @@ export default function ProjectForm() {
   const [script, setScript] = useState("");
   const [style1, setStyle1] = useState<File | null>(null);
   const [style2, setStyle2] = useState<File | null>(null);
+  const [voiceId, setVoiceId] = useState("Dennis");
+  const [splitMode, setSplitMode] = useState<"smart" | "exact">("smart");
   const [loading, setLoading] = useState(false);
   const [phase, setPhase] = useState("");
   const [progress, setProgress] = useState(0);
@@ -44,6 +47,10 @@ export default function ProjectForm() {
         script.trim(),
         style1,
         style2,
+        {
+          voiceId,
+          splitMode,
+        },
         {
           onPhase: (p) => setPhase(p),
           onSceneProgress: (num, type, status) => {
@@ -150,6 +157,37 @@ export default function ProjectForm() {
                   </button>
                 </div>
               ))}
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-foreground">Narration Voice</label>
+                <Select value={voiceId} onValueChange={setVoiceId}>
+                  <SelectTrigger className="bg-secondary border-border">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {INWORLD_VOICES.map((v) => (
+                      <SelectItem key={v.id} value={v.id}>
+                        {v.name} — {v.description}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-foreground">Script Split Mode</label>
+                <Select value={splitMode} onValueChange={(v) => setSplitMode(v as "smart" | "exact")}>
+                  <SelectTrigger className="bg-secondary border-border">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="smart">Smart — sentence-aware beats</SelectItem>
+                    <SelectItem value="exact">Exact — paragraph boundaries</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
 
             {loading && (

@@ -44,6 +44,7 @@ export async function createProjectFrontend(
   script: string,
   style1: File | null,
   style2: File | null,
+  options: { voiceId?: string; splitMode?: "smart" | "exact" },
   callbacks: PipelineCallbacks
 ): Promise<string> {
   const settings = loadProviderSettings();
@@ -59,11 +60,12 @@ export async function createProjectFrontend(
     settings: {
       imageProvider: settings.imageProvider,
       ttsProvider: settings.ttsProvider,
-      voiceId: settings.voiceId,
+      voiceId: options.voiceId || settings.voiceId,
       modelId: settings.modelId,
       imageConcurrency: settings.imageConcurrency,
       audioConcurrency: settings.audioConcurrency,
       historyMode: true,
+      splitMode: options.splitMode || "smart",
     },
     style_summary: DEFAULT_STYLE_SUMMARY,
     stats: { sceneCount: 0, imagesCompleted: 0, audioCompleted: 0, imagesFailed: 0, audioFailed: 0, needsReviewCount: 0 },
@@ -93,7 +95,7 @@ export async function createProjectFrontend(
 
   let scenes: SceneManifest[];
   try {
-    scenes = await generateSceneManifest(title, script, styleSummary, settings.groqApiKey);
+    scenes = await generateSceneManifest(title, script, styleSummary, settings.groqApiKey, options.splitMode);
   } catch (e: any) {
     await supabase.from("projects").update({ status: "failed" }).eq("id", projectId);
     throw new Error(`Scene generation failed: ${e.message}`);
@@ -197,7 +199,7 @@ export async function createProjectFrontend(
         audioBlob = await generateInworldAudio(
           scene.tts_text || scene.script_text || "",
           settings.inworldApiKey,
-          settings.voiceId,
+          options.voiceId || settings.voiceId,
           settings.modelId
         );
       } else {
