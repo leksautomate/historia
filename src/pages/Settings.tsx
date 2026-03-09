@@ -6,8 +6,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Slider } from "@/components/ui/slider";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { Save, Eye, EyeOff, CheckCircle2, XCircle, Loader2, Wifi } from "lucide-react";
-import { loadProviderSettings, saveProviderSettings, INWORLD_VOICES, type ProviderSettings } from "@/lib/providers";
+import { Save, Eye, EyeOff, CheckCircle2, XCircle, Loader2, Wifi, Plus, Trash2 } from "lucide-react";
+import { loadProviderSettings, saveProviderSettings, INWORLD_VOICES, getAvailableVoices, type ProviderSettings } from "@/lib/providers";
 
 type HealthStatus = "idle" | "checking" | "ok" | "error";
 
@@ -25,6 +25,8 @@ function StatusIndicator({ status, message }: { status: HealthStatus; message?: 
 
 export default function Settings() {
   const [settings, setSettings] = useState<ProviderSettings>(loadProviderSettings);
+  const [newVoiceId, setNewVoiceId] = useState("");
+  const [newVoiceName, setNewVoiceName] = useState("");
   const [showGroq, setShowGroq] = useState(false);
   const [showWhisk, setShowWhisk] = useState(false);
   const [showInworld, setShowInworld] = useState(false);
@@ -284,9 +286,18 @@ export default function Settings() {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
+                <SelectItem value="_group_builtin" disabled className="text-xs font-semibold text-muted-foreground">— Built-in Voices —</SelectItem>
                 {INWORLD_VOICES.map(v => (
                   <SelectItem key={v.id} value={v.id}>
                     {v.name} — {v.description}
+                  </SelectItem>
+                ))}
+                {(settings.customVoices || []).length > 0 && (
+                  <SelectItem value="_group_custom" disabled className="text-xs font-semibold text-muted-foreground">— Custom Voices —</SelectItem>
+                )}
+                {(settings.customVoices || []).map(v => (
+                  <SelectItem key={v.id} value={v.id}>
+                    {v.name} (custom)
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -294,6 +305,69 @@ export default function Settings() {
             <p className="text-xs text-muted-foreground">
               Default voice for new scenes. Can be overridden per scene.
             </p>
+          </div>
+          <div className="space-y-3">
+            <label className="text-sm font-medium text-foreground">Custom Voices</label>
+            <p className="text-xs text-muted-foreground">
+              Add a voice by its Inworld voice ID and a display name.
+            </p>
+            <div className="flex gap-2">
+              <Input
+                placeholder="Voice ID (e.g. Jordan)"
+                value={newVoiceId}
+                onChange={(e) => setNewVoiceId(e.target.value)}
+                className="bg-secondary flex-1"
+                data-testid="input-custom-voice-id"
+              />
+              <Input
+                placeholder="Display name"
+                value={newVoiceName}
+                onChange={(e) => setNewVoiceName(e.target.value)}
+                className="bg-secondary flex-1"
+                data-testid="input-custom-voice-name"
+              />
+              <Button
+                size="sm"
+                variant="outline"
+                data-testid="button-add-custom-voice"
+                onClick={() => {
+                  const id = newVoiceId.trim();
+                  const name = newVoiceName.trim() || id;
+                  if (!id) return;
+                  const existing = settings.customVoices || [];
+                  if (existing.some(v => v.id === id)) {
+                    toast.error("A voice with that ID already exists.");
+                    return;
+                  }
+                  setSettings(s => ({ ...s, customVoices: [...(s.customVoices || []), { id, name }] }));
+                  setNewVoiceId("");
+                  setNewVoiceName("");
+                }}
+              >
+                <Plus className="h-4 w-4" />
+              </Button>
+            </div>
+            {(settings.customVoices || []).length > 0 && (
+              <div className="space-y-2">
+                {(settings.customVoices || []).map(v => (
+                  <div key={v.id} className="flex items-center justify-between bg-secondary rounded px-3 py-2">
+                    <div>
+                      <span className="text-sm font-medium">{v.name}</span>
+                      <span className="text-xs text-muted-foreground ml-2">ID: {v.id}</span>
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive"
+                      data-testid={`button-remove-voice-${v.id}`}
+                      onClick={() => setSettings(s => ({ ...s, customVoices: (s.customVoices || []).filter(x => x.id !== v.id) }))}
+                    >
+                      <Trash2 className="h-3 w-3" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
           <div className="space-y-2">
             <label className="text-sm font-medium text-foreground">TTS Model</label>

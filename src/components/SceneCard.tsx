@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { getAssetUrl, regenerateAssetFrontend, splitScene } from "@/lib/api";
-import { INWORLD_VOICES } from "@/lib/providers";
+import { getAvailableVoices, loadProviderSettings } from "@/lib/providers";
 import type { Scene } from "@/lib/types";
 import AudioPlayer from "@/components/AudioPlayer";
 import SplitSceneDialog from "@/components/SplitSceneDialog";
@@ -211,7 +211,7 @@ export default function SceneCard({ scene, projectId, onRefresh }: Props) {
                     <SelectValue placeholder="Global default" />
                   </SelectTrigger>
                   <SelectContent>
-                    {INWORLD_VOICES.map(v => (
+                    {getAvailableVoices(loadProviderSettings()).map(v => (
                       <SelectItem key={v.id} value={v.id} className="text-xs">
                         {v.name} — {v.description}
                       </SelectItem>

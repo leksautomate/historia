@@ -4,6 +4,11 @@
 // Settings helpers
 // ========================
 
+export interface CustomVoice {
+  id: string;
+  name: string;
+}
+
 export interface ProviderSettings {
   imageProvider: string;
   ttsProvider: string;
@@ -14,6 +19,7 @@ export interface ProviderSettings {
   groqApiKey: string;
   whiskCookie: string;
   inworldApiKey: string;
+  customVoices: CustomVoice[];
 }
 
 export interface InworldVoice {
@@ -24,12 +30,31 @@ export interface InworldVoice {
 
 export const INWORLD_VOICES: InworldVoice[] = [
   { id: "Dennis", name: "Dennis", description: "Male, warm baritone narrator" },
-  { id: "Eleanor", name: "Eleanor", description: "Female, elegant and composed" },
   { id: "James", name: "James", description: "Male, authoritative and deep" },
-  { id: "Linda", name: "Linda", description: "Female, friendly and clear" },
   { id: "Brian", name: "Brian", description: "Male, calm and neutral" },
+  { id: "Marcus", name: "Marcus", description: "Male, strong and commanding" },
+  { id: "Oliver", name: "Oliver", description: "Male, clear and professional" },
+  { id: "Patrick", name: "Patrick", description: "Male, rich and dramatic" },
+  { id: "Daniel", name: "Daniel", description: "Male, smooth and measured" },
+  { id: "Morgan", name: "Morgan", description: "Neutral, steady documentary tone" },
+  { id: "Eleanor", name: "Eleanor", description: "Female, elegant and composed" },
+  { id: "Linda", name: "Linda", description: "Female, friendly and clear" },
   { id: "Amy", name: "Amy", description: "Female, youthful and energetic" },
+  { id: "Sophia", name: "Sophia", description: "Female, warm and expressive" },
+  { id: "Hannah", name: "Hannah", description: "Female, gentle and refined" },
+  { id: "Rachel", name: "Rachel", description: "Female, confident and articulate" },
+  { id: "Victoria", name: "Victoria", description: "Female, regal and authoritative" },
+  { id: "Emma", name: "Emma", description: "Female, bright and engaging" },
 ];
+
+export function getAvailableVoices(settings: ProviderSettings): InworldVoice[] {
+  const custom: InworldVoice[] = (settings.customVoices || []).map(v => ({
+    id: v.id,
+    name: v.name,
+    description: "Custom voice",
+  }));
+  return [...INWORLD_VOICES, ...custom];
+}
 
 const DEFAULTS: ProviderSettings = {
   imageProvider: "ai",
@@ -41,6 +66,7 @@ const DEFAULTS: ProviderSettings = {
   groqApiKey: "",
   whiskCookie: "",
   inworldApiKey: "",
+  customVoices: [],
 };
 
 export function loadProviderSettings(): ProviderSettings {

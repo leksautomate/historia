@@ -8,17 +8,19 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { createProjectFrontend } from "@/lib/api";
-import { loadProviderSettings, INWORLD_VOICES } from "@/lib/providers";
+import { loadProviderSettings, getAvailableVoices } from "@/lib/providers";
 import { Upload, Scroll, Loader2, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 
 export default function ProjectForm() {
   const navigate = useNavigate();
+  const [settings] = useState(loadProviderSettings);
+  const allVoices = getAvailableVoices(settings);
   const [title, setTitle] = useState("");
   const [script, setScript] = useState("");
   const [style1, setStyle1] = useState<File | null>(null);
   const [style2, setStyle2] = useState<File | null>(null);
-  const [voiceId, setVoiceId] = useState("Dennis");
+  const [voiceId, setVoiceId] = useState(settings.voiceId || "Dennis");
   const [splitMode, setSplitMode] = useState<"smart" | "exact">("smart");
   const [loading, setLoading] = useState(false);
   const [phase, setPhase] = useState("");
@@ -163,7 +165,7 @@ export default function ProjectForm() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {INWORLD_VOICES.map((v) => (
+                    {allVoices.map((v) => (
                       <SelectItem key={v.id} value={v.id}>
                         {v.name} — {v.description}
                       </SelectItem>
