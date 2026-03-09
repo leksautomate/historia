@@ -86,101 +86,58 @@ export function saveProviderSettings(settings: ProviderSettings) {
 // Groq — Scene manifest generation
 // ========================
 
-const SCENE_SYSTEM_PROMPT_SMART = `You are a visual content director generating image prompts for YouTube history documentary videos.
+const BATCH_IMAGE_PROMPT = `You are a visual content director for a YouTube history documentary.
 
-You will receive a video title and full script. Your task is to split the script into cinematic scene prompts — one per clear narrative or emotional beat.
+For each numbered scene below, generate ONE cinematic image prompt and THREE fallback prompts.
 
-SCENE SPLITTING RULES (SMART MODE):
-- Create 1 scene per 2–4 sentences of the script
-- Create a new scene when: location/terrain shifts, battle phase changes, emotional register shifts, a new commander/perspective appears, a strategic decision occurs
-- Each scene represents one clear cinematic moment`;
-
-const SCENE_SYSTEM_PROMPT_EXACT = `You are a visual content director generating image prompts for YouTube history documentary videos.
-
-You will receive a video title and full script. Your task is to split the script into cinematic scene prompts — one per paragraph.
-
-SCENE SPLITTING RULES (EXACT MODE):
-- Create 1 scene per paragraph boundary
-- Each paragraph in the script becomes its own scene`;
-
-const SCENE_SYSTEM_PROMPT_COMMON = `
-VISUAL STYLE — ALL PROMPTS MUST FOLLOW THIS:
+VISUAL STYLE:
 - Cinematic historical realism, photographic documentary, Caravaggio-level contrast
-- Images must feel like: film stills from a prestige historical epic, documentary reconstruction photography, high-end historical paintings brought to life
-- All scenes must look like real photography or prestige historical cinema — no fantasy, no video game look, no cartoon, no neon, no sci-fi, no modern elements
+- Images must feel like film stills from a prestige historical epic or documentary reconstruction photography
+- No fantasy, no video game look, no cartoon, no neon, no sci-fi, no modern elements
 
-PEOPLE — STRICT ANONYMITY RULES:
+PEOPLE — STRICT ANONYMITY:
 - All figures must be anonymous: warriors, commanders, soldiers — never identifiable by face
-- Faces must be: obscured by helmets/hoods/shadow, turned away, silhouetted, or blurred by shallow depth of field
+- Faces must be obscured by helmets/hoods/shadow, turned away, silhouetted, or blurred by depth of field
 - Represent characters through posture, armor, weapons, body language only
-- Whenever possible: show silhouettes against sky or fire, partial shadows from helmet, viewed from behind, seen through dust/smoke
 
-ENVIRONMENTS — must feel historically grounded, physically worn, dusty, sun-baked, or battle-scarred:
-open desert battlefields, rocky valley passes, ancient walled cities, command tents, riverbanks, mountain passes, burning villages, fortified hilltops, ancient harbors, throne rooms, siege lines
-Include period-accurate details: spears planted in ground, supply carts, water skins, banners and standards, wooden shields, campfires, stone walls, blood-stained earth
+ENVIRONMENTS: historically grounded, physically worn, dusty, sun-baked, or battle-scarred
+Include period-accurate details: spears, supply carts, banners, wooden shields, campfires, stone walls
 
-LIGHTING OPTIONS — use variety across scenes:
-harsh midday sun with deep shadows, pre-dawn blue light before battle, torch and fire glow in night camps, dust-filtered golden sunlight, sunset silhouettes of armies, smoke-filtered combat light
+LIGHTING: harsh midday sun, pre-dawn blue light, torch and fire glow, dust-filtered gold, sunset silhouettes, smoke-filtered combat light
 
-COLOR TONE: desaturated earth tones, bronze, iron, ochre, dust brown, deep reds and dark shadows, golden-hour warmth cut with darkness
+COLOR: desaturated earth tones, bronze, iron, ochre, dust brown, deep reds and dark shadows
 
-PROMPT STRUCTURE — each image_prompt must be exactly ONE sentence:
+PROMPT STRUCTURE — each prompt must be exactly ONE sentence:
 [Who is present] + [what they are doing] + [where they are] + [camera angle/framing] + [lighting and mood]
 
-Every prompt MUST contain a CLEAR VISIBLE ACTION — never a static scene description.
-Strong actions: charging, kneeling in prayer, drawing sword, reading map by torchlight, receiving surrender, digging trenches, signaling retreat, binding a wound, rallying soldiers, crossing a river at night.
+Every prompt MUST contain a CLEAR VISIBLE ACTION — never a static description.
 
-CAMERA VARIETY — rotate between these framings (never repeat consecutive framings):
-- Close-up: hands, weapons, eyes, wounds, tools
-- Medium shot: individual warrior or commander, 50mm natural perspective
-- Wide shot: formations, terrain, armies, 24–35mm sweeping view
-- Over-the-shoulder command perspective
-- Ground-level looking up at advancing forces
-- High angle showing scale and positioning
-- Behind-the-back silhouette shots
-- Doorway or tent-entrance framing
-- Reflection in shield or water surface
+CAMERA VARIETY — use a different angle for each scene, rotate through:
+close-up of hands/weapons/eyes, medium shot of individual, wide shot of formations/terrain, over-the-shoulder, ground-level looking up, high angle, silhouette against sky, doorway/tent-entrance framing
 
-HISTORICAL PERIOD ACCURACY — match weapons, armor, environment to the period derived from the title and script:
-- Early Islamic warfare: chainmail, curved swords, Arabian horses, desert terrain, leather shields, turbans over armor
-- Ancient Greek: bronze Corinthian helmets, round hoplon shields, spear formations, open hillsides
-- Mongol: composite bows on horseback, lamellar armor, open steppe, circular camp formations
-- Medieval Crusades: iron chainmail, long kite shields, siege towers, walled city backgrounds
-- Roman: lorica segmentata, rectangular scutum shields, formation marching, stone roads and fortifications
+HISTORICAL PERIOD ACCURACY — match weapons/armor/environment to the period in the video title:
+- Early Islamic warfare: chainmail, curved swords, Arabian horses, desert terrain, turbans over armor
+- Ancient Greek: bronze Corinthian helmets, hoplon shields, spear formations, open hillsides
+- Mongol: composite bows on horseback, lamellar armor, open steppe
+- Medieval Crusades: iron chainmail, kite shields, siege towers, walled city backgrounds
+- Roman: lorica segmentata, scutum shields, formation marching, stone roads and fortifications
 
-STRICT RESTRICTIONS — NEVER include:
-- Text overlays, banners with readable text, labels or signs with legible writing
-- Celebrity names or real people with identifiable faces
-- Modern brands, fantasy/sci-fi/game aesthetics, neon colors, cartoon rendering
-
-RULES:
-- Keep scene_number sequential from 1
-- Keep people anonymous (generic roles: soldier, commander, ruler, warrior, monk, archer, cavalry, siege crew)
-- tts_text must be IDENTICAL to script_text — do not rephrase, rewrite, or summarize
-- Assign scene_type: character | location | crowd | battle_light | artifact | transition
-- Assign historical_period derived from the title/script context
-- Assign visual_priority: character | environment | object
-- image_file = {scene_number}.png, audio_file = {scene_number}.mp3
-- Produce 3 fallback_prompts per scene — each must also be one complete cinematic sentence with a different camera angle than the main prompt
+RESTRICTIONS: No text overlays, no identifiable faces, no fantasy/sci-fi/modern brands
 
 Return ONLY valid JSON matching this exact schema:
 {
   "scenes": [
     {
       "scene_number": 1,
-      "scene_type": "location",
-      "historical_period": "ancient rome",
-      "visual_priority": "environment",
-      "script_text": "original script chunk verbatim",
-      "tts_text": "identical to script_text",
-      "image_prompt": "One complete cinematic sentence following the prompt structure above, ending with a period.",
+      "scene_type": "character|location|crowd|battle_light|artifact|transition",
+      "historical_period": "derived from title and scene context",
+      "visual_priority": "character|environment|object",
+      "image_prompt": "One complete cinematic sentence ending with a period.",
       "fallback_prompts": [
-        "Fallback with different camera angle, one sentence, ending with a period.",
-        "Fallback focusing on environment, one sentence, ending with a period.",
-        "Fallback symbolic/aftermath angle, one sentence, ending with a period."
-      ],
-      "image_file": "1.png",
-      "audio_file": "1.mp3"
+        "Fallback with different camera angle, one sentence.",
+        "Fallback focusing on environment, one sentence.",
+        "Fallback symbolic/aftermath angle, one sentence."
+      ]
     }
   ]
 }`;
@@ -198,6 +155,23 @@ export interface SceneManifest {
   audio_file: string;
 }
 
+/** Split script into scenes — 2 sentences per scene (smart) or 1 sentence (exact) */
+export function splitScriptIntoScenes(
+  script: string,
+  sentencesPerScene: number = 2
+): Array<{ scene_number: number; script_text: string }> {
+  const sentences = script.match(/[^.!?]+[.!?]+[\s\n]*/g) || [script];
+  const scenes: Array<{ scene_number: number; script_text: string }> = [];
+  let sceneNum = 1;
+
+  for (let i = 0; i < sentences.length; i += sentencesPerScene) {
+    const group = sentences.slice(i, i + sentencesPerScene).join("").trim();
+    if (group) scenes.push({ scene_number: sceneNum++, script_text: group });
+  }
+  return scenes.length > 0 ? scenes : [{ scene_number: 1, script_text: script }];
+}
+
+/** Legacy chunk splitter — kept for backward compatibility */
 export function splitScriptIntoChunks(script: string, maxWords = 800): string[] {
   const sentences = script.match(/[^.!?]+[.!?]+[\s\n]*/g) || [script];
   const chunks: string[] = [];
@@ -223,22 +197,38 @@ function delay(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-async function callGroqForScenes(
-  systemPrompt: string,
-  userPrompt: string,
+interface BatchPromptResult {
+  scene_number: number;
+  scene_type: string;
+  historical_period: string;
+  visual_priority: string;
+  image_prompt: string;
+  fallback_prompts: string[];
+}
+
+async function callGroqForBatch(
+  title: string,
+  scenes: Array<{ scene_number: number; script_text: string }>,
   groqApiKey: string,
   retryOnRateLimit = true
-): Promise<SceneManifest[]> {
+): Promise<BatchPromptResult[]> {
+  const scenesText = scenes
+    .map(s => `Scene ${s.scene_number}: "${s.script_text}"`)
+    .join("\n");
+
+  const userPrompt = `Video Title: ${title}\n\nGenerate image prompts for these ${scenes.length} scenes:\n\n${scenesText}\n\nReturn ONLY the JSON object.`;
+
   const result = await whiskProxy({
     action: "groq-chat",
     apiKey: groqApiKey,
     payload: {
-      model: "llama-3.3-70b-versatile",
+      model: "openai/gpt-oss-120b",
       messages: [
-        { role: "system", content: systemPrompt },
+        { role: "system", content: BATCH_IMAGE_PROMPT },
         { role: "user", content: userPrompt },
       ],
       temperature: 0.3,
+      max_tokens: 32000,
       response_format: { type: "json_object" },
     },
   });
@@ -251,9 +241,9 @@ async function callGroqForScenes(
       if (retryOnRateLimit) {
         console.log("[groq] Rate limited — waiting 15s before retry...");
         await delay(15000);
-        return callGroqForScenes(systemPrompt, userPrompt, groqApiKey, false);
+        return callGroqForBatch(title, scenes, groqApiKey, false);
       }
-      throw new Error("Groq rate limited — try again in a moment, or reduce script length.");
+      throw new Error("Groq rate limited — try again in a moment.");
     }
     if (result.status === 401) throw new Error("Groq API key is invalid. Update it in Settings.");
     throw new Error(`Groq API error (HTTP ${result.status}): ${errText.substring(0, 200)}`);
@@ -270,72 +260,77 @@ async function callGroqForScenes(
 export async function generateScenesForChunk(
   title: string,
   chunk: string,
-  chunkIdx: number,
-  totalChunks: number,
+  _chunkIdx: number,
+  _totalChunks: number,
   startSceneNumber: number,
   groqApiKey: string,
   splitMode: "smart" | "exact" = "smart"
 ): Promise<SceneManifest[]> {
-  const baseSystemPrompt = (splitMode === "exact" ? SCENE_SYSTEM_PROMPT_EXACT : SCENE_SYSTEM_PROMPT_SMART) + "\n" + SCENE_SYSTEM_PROMPT_COMMON;
-  const systemPrompt = totalChunks === 1
-    ? baseSystemPrompt
-    : baseSystemPrompt + `\n\nIMPORTANT: Start scene_number from ${startSceneNumber}. Do not start from 1 again.`;
-  const userPrompt = totalChunks === 1
-    ? `Video Title: ${title}\n\nFull Script:\n${chunk}\n\nGenerate the scene manifest now. Return ONLY the JSON object.`
-    : `Video Title: ${title}\n\nThis is chunk ${chunkIdx + 1} of ${totalChunks} of the full script. Generate scenes only for this portion.\n\nScript Chunk:\n${chunk}\n\nGenerate the scene manifest now. Return ONLY the JSON object.`;
-
-  const scenes = await callGroqForScenes(systemPrompt, userPrompt, groqApiKey);
-
-  return scenes.map((s, idx) => ({
+  const sentencesPerScene = splitMode === "exact" ? 1 : 2;
+  const sceneChunks = splitScriptIntoScenes(chunk, sentencesPerScene).map((s, idx) => ({
     ...s,
     scene_number: startSceneNumber + idx,
-    image_file: `${startSceneNumber + idx}.png`,
-    audio_file: `${startSceneNumber + idx}.mp3`,
   }));
+
+  const prompts = await callGroqForBatch(title, sceneChunks, groqApiKey);
+
+  return sceneChunks.map((sc, idx) => {
+    const p = prompts[idx] || {} as BatchPromptResult;
+    return {
+      scene_number: sc.scene_number,
+      scene_type: p.scene_type || "location",
+      historical_period: p.historical_period || "",
+      visual_priority: p.visual_priority || "environment",
+      script_text: sc.script_text,
+      tts_text: sc.script_text,
+      image_prompt: p.image_prompt || "",
+      fallback_prompts: p.fallback_prompts || [],
+      image_file: `${sc.scene_number}.png`,
+      audio_file: `${sc.scene_number}.mp3`,
+    };
+  });
 }
 
 export async function generateSceneManifest(
   title: string,
   script: string,
-  styleSummary: any,
+  _styleSummary: any,
   groqApiKey: string,
   splitMode: "smart" | "exact" = "smart",
   onChunkProgress?: (current: number, total: number) => void
 ): Promise<SceneManifest[]> {
-  const baseSystemPrompt = (splitMode === "exact" ? SCENE_SYSTEM_PROMPT_EXACT : SCENE_SYSTEM_PROMPT_SMART) + "\n" + SCENE_SYSTEM_PROMPT_COMMON;
+  const sentencesPerScene = splitMode === "exact" ? 1 : 2;
+  const sceneChunks = splitScriptIntoScenes(script, sentencesPerScene);
 
-  const chunks = splitScriptIntoChunks(script, 800);
-
-  if (chunks.length === 1) {
-    const systemPrompt = baseSystemPrompt;
-    const userPrompt = `Video Title: ${title}\n\nFull Script:\n${script}\n\nGenerate the scene manifest now. Return ONLY the JSON object.`;
-    const scenes = await callGroqForScenes(systemPrompt, userPrompt, groqApiKey);
-    onChunkProgress?.(1, 1);
-    return scenes;
-  }
-
+  const BATCH_SIZE = 30;
+  const totalBatches = Math.ceil(sceneChunks.length / BATCH_SIZE);
   const allScenes: SceneManifest[] = [];
-  let nextSceneNumber = 1;
 
-  for (let i = 0; i < chunks.length; i++) {
-    const chunk = chunks[i];
-    if (i > 0) await delay(3000);
+  for (let i = 0; i < sceneChunks.length; i += BATCH_SIZE) {
+    if (i > 0) await delay(2000);
 
-    const systemPrompt = baseSystemPrompt + `\n\nIMPORTANT: Start scene_number from ${nextSceneNumber}. Do not start from 1 again.`;
-    const userPrompt = `Video Title: ${title}\n\nThis is chunk ${i + 1} of ${chunks.length} of the full script. Generate scenes only for this portion.\n\nScript Chunk:\n${chunk}\n\nGenerate the scene manifest now. Return ONLY the JSON object.`;
+    const batch = sceneChunks.slice(i, i + BATCH_SIZE);
+    const batchIdx = Math.floor(i / BATCH_SIZE);
+    const prompts = await callGroqForBatch(title, batch, groqApiKey);
 
-    const scenes = await callGroqForScenes(systemPrompt, userPrompt, groqApiKey);
+    const merged: SceneManifest[] = batch.map((sc, idx) => {
+      const p = prompts[idx] || {} as BatchPromptResult;
+      return {
+        scene_number: sc.scene_number,
+        scene_type: p.scene_type || "location",
+        historical_period: p.historical_period || "",
+        visual_priority: p.visual_priority || "environment",
+        script_text: sc.script_text,
+        tts_text: sc.script_text,
+        image_prompt: p.image_prompt || "",
+        fallback_prompts: p.fallback_prompts || [],
+        image_file: `${sc.scene_number}.png`,
+        audio_file: `${sc.scene_number}.mp3`,
+      };
+    });
 
-    const renumbered = scenes.map((s, idx) => ({
-      ...s,
-      scene_number: nextSceneNumber + idx,
-      image_file: `${nextSceneNumber + idx}.png`,
-      audio_file: `${nextSceneNumber + idx}.mp3`,
-    }));
-
-    allScenes.push(...renumbered);
-    nextSceneNumber += renumbered.length;
-    onChunkProgress?.(i + 1, chunks.length);
+    allScenes.push(...merged);
+    onChunkProgress?.(batchIdx + 1, totalBatches);
   }
 
   return allScenes;
@@ -522,7 +517,7 @@ export async function regenerateImagePrompt(
     action: "groq-chat",
     apiKey: groqApiKey,
     payload: {
-      model: "llama-3.3-70b-versatile",
+      model: "openai/gpt-oss-120b",
       messages: [
         {
           role: "system",
