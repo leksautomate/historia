@@ -341,6 +341,48 @@ function generateMockAudio(): Buffer {
   return Buffer.concat(Array(38).fill(header));
 }
 
+router.post("/:id/scenes/append", async (req: Request, res: Response) => {
+  try {
+    const projectId = req.params.id;
+    const { scenes: sceneList } = req.body;
+    if (!sceneList || !Array.isArray(sceneList)) return res.status(400).json({ error: "scenes array required" });
+
+    const sceneRows = sceneList.map((s: any, i: number) => ({
+      project_id: projectId,
+      scene_number: s.scene_number || i + 1,
+      scene_type: s.scene_type || "location",
+      historical_period: s.historical_period || "generic historical",
+      visual_priority: s.visual_priority || "environment",
+      script_text: s.script_text || "",
+      tts_text: s.tts_text || s.script_text || "",
+      image_prompt: s.image_prompt || "",
+      fallback_prompts: s.fallback_prompts || [],
+      image_file: s.image_file || `${s.scene_number || i + 1}.png`,
+      audio_file: s.audio_file || `${s.scene_number || i + 1}.mp3`,
+      image_status: "pending",
+      audio_status: "pending",
+    }));
+
+    await db.insert(scenes).values(sceneRows);
+
+    const allScenes = await db.select().from(scenes).where(eq(scenes.project_id, projectId));
+    await db.update(projects).set({
+      stats: {
+        sceneCount: allScenes.length,
+        imagesCompleted: allScenes.filter((s: any) => s.image_status === "completed").length,
+        audioCompleted: allScenes.filter((s: any) => s.audio_status === "completed").length,
+        imagesFailed: allScenes.filter((s: any) => s.image_status === "failed").length,
+        audioFailed: allScenes.filter((s: any) => s.audio_status === "failed").length,
+        needsReviewCount: allScenes.filter((s: any) => s.needs_review).length,
+      },
+    }).where(eq(projects.id, projectId));
+
+    res.json({ success: true, appended: sceneList.length, total: allScenes.length });
+  } catch (e: any) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 router.post("/:id/scenes", async (req: Request, res: Response) => {
   try {
     const projectId = req.params.id;

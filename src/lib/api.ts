@@ -2,6 +2,8 @@ import type { Project, Scene } from "./types";
 import {
   loadProviderSettings,
   generateSceneManifest,
+  generateScenesForChunk,
+  splitScriptIntoChunks,
   generateWhiskImage,
   generateInworldAudio,
   generateMockSVG,
@@ -83,6 +85,39 @@ export interface PipelineCallbacks {
   onStats: (stats: { imagesCompleted: number; audioCompleted: number; imagesFailed: number; audioFailed: number; total: number }) => void;
 }
 
+async function appendScenesToProject(projectId: string, newScenes: SceneManifest[]): Promise<void> {
+  await fetch(`${API_BASE}/projects/${projectId}/scenes/append`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ scenes: newScenes }),
+  }).catch(e => console.error(`[progressive] append failed:`, e.message));
+}
+
+async function processRemainingChunks(
+  title: string,
+  chunks: string[],
+  chunkStartIdx: number,
+  totalChunks: number,
+  startSceneNumber: number,
+  projectId: string,
+  groqApiKey: string,
+  splitMode: "smart" | "exact"
+): Promise<void> {
+  let nextSceneNumber = startSceneNumber;
+  for (let i = chunkStartIdx; i < totalChunks; i++) {
+    await new Promise(r => setTimeout(r, 3000));
+    try {
+      console.log(`[progressive] Processing chunk ${i + 1} of ${totalChunks}...`);
+      const chunkScenes = await generateScenesForChunk(title, chunks[i], i, totalChunks, nextSceneNumber, groqApiKey, splitMode);
+      await appendScenesToProject(projectId, chunkScenes);
+      nextSceneNumber += chunkScenes.length;
+      console.log(`[progressive] Chunk ${i + 1} appended: ${chunkScenes.length} scenes`);
+    } catch (e: any) {
+      console.error(`[progressive] Chunk ${i + 1} failed: ${e.message}`);
+    }
+  }
+}
+
 export async function createProjectFrontend(
   title: string,
   script: string,
@@ -92,25 +127,24 @@ export async function createProjectFrontend(
   callbacks: PipelineCallbacks
 ): Promise<{ projectId: string; serverPipeline: boolean; sceneCount: number }> {
   const settings = loadProviderSettings();
-
-  callbacks.onPhase("Generating scene manifest via Groq...");
   if (!settings.groqApiKey) throw new Error("Groq API key not configured. Go to Settings to add it.");
 
-  let scenes: SceneManifest[];
+  const chunks = splitScriptIntoChunks(script, 800);
+  const totalChunks = chunks.length;
+
+  callbacks.onPhase(totalChunks > 1
+    ? `Generating scenes (chunk 1 of ${totalChunks})...`
+    : "Generating scene manifest via Groq..."
+  );
+
+  let firstChunkScenes: SceneManifest[];
   try {
-    scenes = await generateSceneManifest(
-      title,
-      script,
-      DEFAULT_STYLE_SUMMARY,
-      settings.groqApiKey,
-      options.splitMode,
-      (current, total) => callbacks.onPhase(`Generating scenes (chunk ${current} of ${total})...`)
-    );
+    firstChunkScenes = await generateScenesForChunk(title, chunks[0], 0, totalChunks, 1, settings.groqApiKey, options.splitMode || "smart");
   } catch (e: any) {
     throw new Error(`Scene generation failed: ${e.message}`);
   }
 
-  callbacks.onPhase(`Creating project with ${scenes.length} scenes...`);
+  callbacks.onPhase(`Creating project with ${firstChunkScenes.length} scenes${totalChunks > 1 ? ` (${totalChunks - 1} more chunks processing in background)` : ""}...`);
 
   const formData = new FormData();
   formData.append("title", title);
@@ -137,10 +171,16 @@ export async function createProjectFrontend(
   const scenesRes = await fetch(`${API_BASE}/projects/${serverProjectId}/scenes`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ scenes }),
+    body: JSON.stringify({ scenes: firstChunkScenes }),
   }).then(r => r.json()).catch(() => ({ success: true, serverPipeline: false }));
 
-  return { projectId: serverProjectId, serverPipeline: !!scenesRes.serverPipeline, sceneCount: scenes.length };
+  if (totalChunks > 1) {
+    const nextSceneNumber = firstChunkScenes.length + 1;
+    processRemainingChunks(title, chunks, 1, totalChunks, nextSceneNumber, serverProjectId, settings.groqApiKey, options.splitMode || "smart")
+      .catch(e => console.error("[progressive] background processing error:", e.message));
+  }
+
+  return { projectId: serverProjectId, serverPipeline: !!scenesRes.serverPipeline, sceneCount: firstChunkScenes.length };
 }
 
 export async function runClientSidePipeline(

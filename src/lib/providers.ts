@@ -198,7 +198,7 @@ export interface SceneManifest {
   audio_file: string;
 }
 
-function splitScriptIntoChunks(script: string, maxWords = 800): string[] {
+export function splitScriptIntoChunks(script: string, maxWords = 800): string[] {
   const sentences = script.match(/[^.!?]+[.!?]+[\s\n]*/g) || [script];
   const chunks: string[] = [];
   let current = "";
@@ -265,6 +265,33 @@ async function callGroqForScenes(
   content = content.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim();
   const parsed = JSON.parse(content);
   return parsed.scenes || [];
+}
+
+export async function generateScenesForChunk(
+  title: string,
+  chunk: string,
+  chunkIdx: number,
+  totalChunks: number,
+  startSceneNumber: number,
+  groqApiKey: string,
+  splitMode: "smart" | "exact" = "smart"
+): Promise<SceneManifest[]> {
+  const baseSystemPrompt = (splitMode === "exact" ? SCENE_SYSTEM_PROMPT_EXACT : SCENE_SYSTEM_PROMPT_SMART) + "\n" + SCENE_SYSTEM_PROMPT_COMMON;
+  const systemPrompt = totalChunks === 1
+    ? baseSystemPrompt
+    : baseSystemPrompt + `\n\nIMPORTANT: Start scene_number from ${startSceneNumber}. Do not start from 1 again.`;
+  const userPrompt = totalChunks === 1
+    ? `Video Title: ${title}\n\nFull Script:\n${chunk}\n\nGenerate the scene manifest now. Return ONLY the JSON object.`
+    : `Video Title: ${title}\n\nThis is chunk ${chunkIdx + 1} of ${totalChunks} of the full script. Generate scenes only for this portion.\n\nScript Chunk:\n${chunk}\n\nGenerate the scene manifest now. Return ONLY the JSON object.`;
+
+  const scenes = await callGroqForScenes(systemPrompt, userPrompt, groqApiKey);
+
+  return scenes.map((s, idx) => ({
+    ...s,
+    scene_number: startSceneNumber + idx,
+    image_file: `${startSceneNumber + idx}.png`,
+    audio_file: `${startSceneNumber + idx}.mp3`,
+  }));
 }
 
 export async function generateSceneManifest(
