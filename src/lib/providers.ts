@@ -155,10 +155,10 @@ export interface SceneManifest {
   audio_file: string;
 }
 
-/** Split script into scenes — 2 sentences per scene (smart) or 1 sentence (exact) */
+/** Split script into scenes — 3 sentences per scene (smart) or 1 sentence (exact) */
 export function splitScriptIntoScenes(
   script: string,
-  sentencesPerScene: number = 2
+  sentencesPerScene: number = 3
 ): Array<{ scene_number: number; script_text: string }> {
   const sentences = script.match(/[^.!?]+[.!?]+[\s\n]*/g) || [script];
   const scenes: Array<{ scene_number: number; script_text: string }> = [];
@@ -266,7 +266,7 @@ export async function generateScenesForChunk(
   groqApiKey: string,
   splitMode: "smart" | "exact" = "smart"
 ): Promise<SceneManifest[]> {
-  const sentencesPerScene = splitMode === "exact" ? 1 : 2;
+  const sentencesPerScene = splitMode === "exact" ? 1 : 3;
   const sceneChunks = splitScriptIntoScenes(chunk, sentencesPerScene).map((s, idx) => ({
     ...s,
     scene_number: startSceneNumber + idx,
@@ -299,7 +299,7 @@ export async function generateSceneManifest(
   splitMode: "smart" | "exact" = "smart",
   onChunkProgress?: (current: number, total: number) => void
 ): Promise<SceneManifest[]> {
-  const sentencesPerScene = splitMode === "exact" ? 1 : 2;
+  const sentencesPerScene = splitMode === "exact" ? 1 : 3;
   const sceneChunks = splitScriptIntoScenes(script, sentencesPerScene);
 
   const BATCH_SIZE = 30;
