@@ -1,4 +1,4 @@
-import { Scroll, Plus, FolderOpen, Settings, AlertTriangle, Scissors } from "lucide-react";
+import { Plus, FolderOpen, Settings, AlertTriangle, Scissors } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useLocation } from "react-router-dom";
 import {
@@ -31,7 +31,9 @@ export function AppSidebar() {
     <Sidebar collapsible="icon">
       <SidebarHeader className="p-4">
         <div className="flex items-center gap-2">
-          <Scroll className="h-6 w-6 text-primary shrink-0" />
+          <div className="shrink-0 w-7 h-7 rounded bg-primary/10 border border-primary/20 flex items-center justify-center">
+            <span className="text-sm font-bold text-primary font-display leading-none">H</span>
+          </div>
           {!collapsed && (
             <span className="text-lg font-display tracking-wide text-foreground">
               Historia
