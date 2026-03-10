@@ -142,6 +142,10 @@ Return ONLY valid JSON matching this exact schema:
   ]
 }`;
 
+export interface SceneSettings {
+  sceneDuration: number; // seconds per scene at 2.5 words/sec speaking rate
+}
+
 export interface SceneManifest {
   scene_number: number;
   scene_type: string;
@@ -160,7 +164,7 @@ export function splitScriptIntoScenes(
   script: string,
   sentencesPerScene: number = 3
 ): Array<{ scene_number: number; script_text: string }> {
-  const sentences = script.match(/[^.!?]+[.!?]+[\s\n]*/g) || [script];
+  const sentences = script.match(/[^.!?]+[.!?]+[\s\n]*|[^.!?]+$/g) || [script];
   const scenes: Array<{ scene_number: number; script_text: string }> = [];
   let sceneNum = 1;
 
@@ -171,9 +175,47 @@ export function splitScriptIntoScenes(
   return scenes.length > 0 ? scenes : [{ scene_number: 1, script_text: script }];
 }
 
+/** Duration-based scene splitter — groups sentences until speaking time target is reached */
+export function splitScriptByDuration(
+  script: string,
+  sceneDuration: number = 6
+): Array<{ scene_number: number; script_text: string }> {
+  const WORDS_PER_SECOND = 2.5;
+  const targetWords = sceneDuration * WORDS_PER_SECOND;
+  const maxWords = Math.max(targetWords * 1.5, targetWords + 20);
+
+  const sentences = script.match(/[^.!?]+[.!?]+[\s\n]*|[^.!?]+$/g) || [script];
+  const scenes: Array<{ scene_number: number; script_text: string }> = [];
+  let sceneNum = 1;
+  let currentSentences: string[] = [];
+  let currentWords = 0;
+
+  for (const sentence of sentences) {
+    const wordCount = sentence.trim().split(/\s+/).length;
+    if (currentWords > 0 && currentWords + wordCount > maxWords) {
+      scenes.push({ scene_number: sceneNum++, script_text: currentSentences.join("").trim() });
+      currentSentences = [sentence];
+      currentWords = wordCount;
+    } else {
+      currentSentences.push(sentence);
+      currentWords += wordCount;
+      if (currentWords >= targetWords) {
+        scenes.push({ scene_number: sceneNum++, script_text: currentSentences.join("").trim() });
+        currentSentences = [];
+        currentWords = 0;
+      }
+    }
+  }
+  if (currentSentences.length > 0) {
+    const text = currentSentences.join("").trim();
+    if (text) scenes.push({ scene_number: sceneNum++, script_text: text });
+  }
+  return scenes.length > 0 ? scenes : [{ scene_number: 1, script_text: script }];
+}
+
 /** Legacy chunk splitter — kept for backward compatibility */
 export function splitScriptIntoChunks(script: string, maxWords = 800): string[] {
-  const sentences = script.match(/[^.!?]+[.!?]+[\s\n]*/g) || [script];
+  const sentences = script.match(/[^.!?]+[.!?]+[\s\n]*|[^.!?]+$/g) || [script];
   const chunks: string[] = [];
   let current = "";
   let wordCount = 0;
@@ -264,13 +306,12 @@ export async function generateScenesForChunk(
   _totalChunks: number,
   startSceneNumber: number,
   groqApiKey: string,
-  splitMode: "smart" | "exact" = "smart"
+  splitMode: "smart" | "exact" | "duration" = "smart"
 ): Promise<SceneManifest[]> {
-  const sentencesPerScene = splitMode === "exact" ? 1 : 3;
-  const sceneChunks = splitScriptIntoScenes(chunk, sentencesPerScene).map((s, idx) => ({
-    ...s,
-    scene_number: startSceneNumber + idx,
-  }));
+  const sceneChunks = (splitMode === "duration"
+    ? splitScriptByDuration(chunk)
+    : splitScriptIntoScenes(chunk, splitMode === "exact" ? 1 : 3)
+  ).map((s, idx) => ({ ...s, scene_number: startSceneNumber + idx }));
 
   const prompts = await callGroqForBatch(title, sceneChunks, groqApiKey);
 
@@ -296,11 +337,12 @@ export async function generateSceneManifest(
   script: string,
   _styleSummary: any,
   groqApiKey: string,
-  splitMode: "smart" | "exact" = "smart",
+  splitMode: "smart" | "exact" | "duration" = "smart",
   onChunkProgress?: (current: number, total: number) => void
 ): Promise<SceneManifest[]> {
-  const sentencesPerScene = splitMode === "exact" ? 1 : 3;
-  const sceneChunks = splitScriptIntoScenes(script, sentencesPerScene);
+  const sceneChunks = splitMode === "duration"
+    ? splitScriptByDuration(script)
+    : splitScriptIntoScenes(script, splitMode === "exact" ? 1 : 3);
 
   const BATCH_SIZE = 30;
   const totalBatches = Math.ceil(sceneChunks.length / BATCH_SIZE);

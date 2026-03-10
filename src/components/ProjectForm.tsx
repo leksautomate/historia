@@ -21,7 +21,7 @@ export default function ProjectForm() {
   const [style1, setStyle1] = useState<File | null>(null);
   const [style2, setStyle2] = useState<File | null>(null);
   const [voiceId, setVoiceId] = useState(settings.voiceId || "Dennis");
-  const [splitMode, setSplitMode] = useState<"smart" | "exact">("smart");
+  const [splitMode, setSplitMode] = useState<"smart" | "exact" | "duration">("smart");
   const [loading, setLoading] = useState(false);
   const [phase, setPhase] = useState("");
   const [progress, setProgress] = useState(0);
@@ -176,13 +176,14 @@ export default function ProjectForm() {
 
               <div className="space-y-2">
                 <label className="text-sm font-medium text-foreground">Script Split Mode</label>
-                <Select value={splitMode} onValueChange={(v) => setSplitMode(v as "smart" | "exact")}>
+                <Select value={splitMode} onValueChange={(v) => setSplitMode(v as "smart" | "exact" | "duration")}>
                   <SelectTrigger className="bg-secondary border-border">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="smart">Smart — sentence-aware beats</SelectItem>
-                    <SelectItem value="exact">Exact — paragraph boundaries</SelectItem>
+                    <SelectItem value="smart">Smart — 3 sentences per scene</SelectItem>
+                    <SelectItem value="exact">Exact — 1 sentence per scene</SelectItem>
+                    <SelectItem value="duration">Duration — adapts to speaking pace</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

@@ -101,7 +101,7 @@ async function processRemainingChunks(
   startSceneNumber: number,
   projectId: string,
   groqApiKey: string,
-  splitMode: "smart" | "exact"
+  splitMode: "smart" | "exact" | "duration"
 ): Promise<void> {
   let nextSceneNumber = startSceneNumber;
   for (let i = chunkStartIdx; i < totalChunks; i++) {
@@ -123,7 +123,7 @@ export async function createProjectFrontend(
   script: string,
   style1: File | null,
   style2: File | null,
-  options: { voiceId?: string; splitMode?: "smart" | "exact" },
+  options: { voiceId?: string; splitMode?: "smart" | "exact" | "duration" },
   callbacks: PipelineCallbacks
 ): Promise<{ projectId: string; serverPipeline: boolean; sceneCount: number }> {
   const settings = loadProviderSettings();
