@@ -7,6 +7,7 @@ import projectsRouter from "./routes/projects.js";
 import assetsRouter from "./routes/assets.js";
 import regenerateRouter from "./routes/regenerate.js";
 import whiskProxyRouter from "./routes/whisk-proxy.js";
+import renderRouter from "./routes/render.js";
 
 dotenv.config();
 
@@ -23,6 +24,7 @@ app.use("/api/projects", projectsRouter);
 app.use("/api", assetsRouter);
 app.use("/api/regenerate", regenerateRouter);
 app.use("/api/whisk-proxy", whiskProxyRouter);
+app.use("/api/render", renderRouter);
 
 const uploadsDir = path.join(process.cwd(), "uploads");
 app.use("/uploads", express.static(uploadsDir));

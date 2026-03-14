@@ -525,6 +525,23 @@ export async function stopProject(projectId: string): Promise<void> {
   await apiRequest(`/projects/${projectId}/stop`, { method: "PATCH" });
 }
 
+export async function startRender(projectId: string): Promise<{ total: number }> {
+  return apiRequest(`/render/${projectId}`, { method: "POST" });
+}
+
+export async function getRenderStatus(projectId: string): Promise<{
+  status: "idle" | "rendering" | "done" | "failed";
+  progress: number;
+  total: number;
+  error?: string;
+}> {
+  return apiRequest(`/render/${projectId}/status`);
+}
+
+export function getRenderDownloadUrl(projectId: string): string {
+  return `/api/render/${projectId}/download`;
+}
+
 export async function resumeProject(projectId: string, callbacks: PipelineCallbacks): Promise<void> {
   const settings = loadProviderSettings();
   await fetch(`${API_BASE}/projects/${projectId}`, {

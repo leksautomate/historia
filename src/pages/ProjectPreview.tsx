@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useParams, Link } from "react-router-dom";
-import { getProject, getAssetUrl, regenerateAssetFrontend, bulkRegeneratePending } from "@/lib/api";
+import { getProject, getAssetUrl, regenerateAssetFrontend, bulkRegeneratePending, startRender, getRenderStatus, getRenderDownloadUrl } from "@/lib/api";
 import { regenerateImagePrompt } from "@/lib/providers";
 import type { Scene } from "@/lib/types";
 import { Button } from "@/components/ui/button";
@@ -9,6 +9,7 @@ import {
   ArrowLeft, Play, Pause, SkipBack, SkipForward,
   Volume2, VolumeX, Loader2, RefreshCw, Sparkles,
   PanelRightOpen, PanelRightClose, Save, Image as ImageIcon,
+  Film, Download, CheckCircle2, AlertTriangle,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Slider } from "@/components/ui/slider";
@@ -34,6 +35,11 @@ export default function ProjectPreview() {
   const [bulkGenerating, setBulkGenerating] = useState(false);
   const [bulkProgress, setBulkProgress] = useState({ done: 0, total: 0 });
   const [projectStatus, setProjectStatus] = useState("");
+  const [renderStatus, setRenderStatus] = useState<"idle" | "rendering" | "done" | "failed">("idle");
+  const [renderProgress, setRenderProgress] = useState(0);
+  const [renderTotal, setRenderTotal] = useState(0);
+  const [renderError, setRenderError] = useState<string | null>(null);
+  const renderPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const audioRef = useRef<HTMLAudioElement>(null);
   const timelineRef = useRef<HTMLDivElement>(null);
@@ -219,6 +225,39 @@ export default function ProjectPreview() {
     }
   };
 
+  const handleRender = async () => {
+    if (!projectId) return;
+    setRenderError(null);
+    setRenderStatus("rendering");
+    setRenderProgress(0);
+    try {
+      const { total } = await startRender(projectId);
+      setRenderTotal(total);
+      toast.success(`Rendering ${total} scenes…`);
+      renderPollRef.current = setInterval(async () => {
+        try {
+          const s = await getRenderStatus(projectId);
+          setRenderProgress(s.progress ?? 0);
+          setRenderTotal(s.total ?? total);
+          if (s.status === "done") {
+            setRenderStatus("done");
+            clearInterval(renderPollRef.current!);
+            toast.success("Video rendered! Ready to download.");
+          } else if (s.status === "failed") {
+            setRenderStatus("failed");
+            setRenderError(s.error ?? "Unknown error");
+            clearInterval(renderPollRef.current!);
+            toast.error(`Render failed: ${s.error}`);
+          }
+        } catch { /* keep polling */ }
+      }, 2000);
+    } catch (e: any) {
+      setRenderStatus("failed");
+      setRenderError(e.message);
+      toast.error(e.message);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-full">
@@ -260,6 +299,39 @@ export default function ProjectPreview() {
                 )}
               </Button>
             )}
+
+            {/* Render button */}
+            {renderStatus === "idle" && (
+              <Button size="sm" variant="default" onClick={handleRender}>
+                <Film className="h-3 w-3 mr-1" />Render Video
+              </Button>
+            )}
+            {renderStatus === "rendering" && (
+              <Button size="sm" variant="default" disabled>
+                <Loader2 className="h-3 w-3 animate-spin mr-1" />
+                Rendering {renderProgress}% ({renderProgress > 0 ? Math.round(renderProgress / 100 * renderTotal) : 0}/{renderTotal})
+              </Button>
+            )}
+            {renderStatus === "done" && projectId && (
+              <div className="flex items-center gap-1">
+                <CheckCircle2 className="h-3 w-3 text-success" />
+                <a href={getRenderDownloadUrl(projectId)} download>
+                  <Button size="sm" variant="default">
+                    <Download className="h-3 w-3 mr-1" />Download MP4
+                  </Button>
+                </a>
+                <Button size="sm" variant="ghost" onClick={() => setRenderStatus("idle")}>Re-render</Button>
+              </div>
+            )}
+            {renderStatus === "failed" && (
+              <div className="flex items-center gap-1">
+                <AlertTriangle className="h-3 w-3 text-destructive" title={renderError ?? ""} />
+                <Button size="sm" variant="outline" onClick={() => setRenderStatus("idle")}>
+                  Retry Render
+                </Button>
+              </div>
+            )}
+
             <Button variant="ghost" size="icon" onClick={() => setSidebarOpen(!sidebarOpen)}>
               {sidebarOpen ? <PanelRightClose className="h-4 w-4" /> : <PanelRightOpen className="h-4 w-4" />}
             </Button>
