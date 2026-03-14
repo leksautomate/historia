@@ -153,7 +153,7 @@ function findImageFile(projectId: string, sceneNumber: number, dbFile?: string |
 
 async function renderVideo(projectId: string, sceneList: any[], width: number, height: number) {
   const FPS = 25;
-  const T = 0.5;  // transition duration in seconds
+  const T = 0.1;  // transition duration in seconds (short to avoid audible narration overlap)
   const dir = path.join("uploads", projectId, "render");
   fs.mkdirSync(dir, { recursive: true });
 

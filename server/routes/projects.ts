@@ -5,7 +5,7 @@ import { eq, desc, or, gt } from "drizzle-orm";
 import multer from "multer";
 import path from "path";
 import fs from "fs";
-import { generateWhiskImageWithRefs, createWhiskProject, generateImageFromProject, getStyleImagePaths } from "../lib/whisk";
+import { createWhiskProject, generateImageFromProject, getStyleImagePaths } from "../lib/whisk";
 
 const router = Router();
 
@@ -422,63 +422,83 @@ async function runMissingImageGeneration(projectId: string) {
     const imgDir = path.join("uploads", projectId, "images");
     fs.mkdirSync(imgDir, { recursive: true });
 
-    for (const scene of targets) {
-      const [projCheck] = await db.select({ status: projects.status }).from(projects).where(eq(projects.id, projectId));
-      if (projCheck?.status === "stopped") {
-        console.log(`${projectId}: generate-missing stopped by user`);
-        return;
-      }
+    // Create Whisk project once and reuse across all missing scenes (avoids N redundant setup calls)
+    let whiskProject: any = null;
+    let whiskRefsAdded = 0;
+    if (imageProvider === "whisk") {
+      const cookie = process.env.WHISK_COOKIE;
+      if (!cookie) throw new Error("WHISK_COOKIE not set in environment");
+      const stylePaths = getStyleImagePaths(projectId);
+      ({ project: whiskProject, refsAdded: whiskRefsAdded } = await createWhiskProject(cookie, stylePaths));
+      console.log(`${projectId}: generate-missing Whisk project created, reusing for ${targets.length} scene(s)`);
+    }
 
-      const num = scene.scene_number;
-      try {
-        if (imageProvider === "whisk") {
-          const cookie = process.env.WHISK_COOKIE;
-          if (!cookie) throw new Error("WHISK_COOKIE not set in environment");
-          const stylePaths = getStyleImagePaths(projectId);
-          const allPrompts = [scene.image_prompt, ...(scene.fallback_prompts as string[] || [])].filter(Boolean);
-          let bytes: Uint8Array | null = null;
-          let lastError = "All Whisk prompts failed";
-          for (const prompt of allPrompts) {
-            try {
-              bytes = await generateWhiskImageWithRefs(prompt, cookie, stylePaths);
-              break;
-            } catch (e: any) {
-              lastError = e.message;
-              console.error(`${projectId} scene ${num}: Whisk prompt failed: ${e.message}`);
-              if (e.message.includes("auth expired") || e.message.includes("Unauthorized") || e.message.includes("expired")) break;
+    let stopped = false;
+    const checkStopped = async (): Promise<boolean> => {
+      if (stopped) return true;
+      const [projCheck] = await db.select({ status: projects.status }).from(projects).where(eq(projects.id, projectId));
+      if (projCheck?.status === "stopped") { stopped = true; return true; }
+      return false;
+    };
+
+    const queue = [...targets];
+    const workers = Array(Math.min(3, targets.length)).fill(null).map(async () => {
+      while (queue.length > 0) {
+        if (await checkStopped()) return;
+        const scene = queue.shift()!;
+        const num = scene.scene_number;
+        try {
+          if (imageProvider === "whisk") {
+            const allPrompts = [scene.image_prompt, ...(scene.fallback_prompts as string[] || [])].filter(Boolean);
+            let bytes: Uint8Array | null = null;
+            let lastError = "All Whisk prompts failed";
+            for (const prompt of allPrompts) {
+              try {
+                bytes = await generateImageFromProject(whiskProject, prompt, whiskRefsAdded);
+                break;
+              } catch (e: any) {
+                lastError = e.message;
+                console.error(`${projectId} scene ${num}: Whisk prompt failed: ${e.message}`);
+                if (e.message.includes("auth expired") || e.message.includes("Unauthorized") || e.message.includes("expired")) break;
+              }
             }
+            if (!bytes) throw new Error(lastError);
+            fs.writeFileSync(path.join(imgDir, `${num}.png`), bytes);
+            await db.update(scenes)
+              .set({ image_status: "completed", image_file: `${num}.png`, image_attempts: (scene.image_attempts || 0) + 1, image_error: null, needs_review: false })
+              .where(eq(scenes.project_id, projectId)).where(eq(scenes.scene_number, num));
+          } else {
+            const svg = generateMockSVG(num, scene.image_prompt || "");
+            fs.writeFileSync(path.join(imgDir, `${num}.svg`), svg);
+            await db.update(scenes)
+              .set({ image_status: "completed", image_file: `${num}.svg`, image_attempts: (scene.image_attempts || 0) + 1, image_error: null, needs_review: false })
+              .where(eq(scenes.project_id, projectId)).where(eq(scenes.scene_number, num));
           }
-          if (!bytes) throw new Error(lastError);
-          fs.writeFileSync(path.join(imgDir, `${num}.png`), bytes);
+          console.log(`${projectId}: generate-missing scene ${num} image done`);
+        } catch (e: any) {
+          console.error(`${projectId} scene ${num}: generate-missing failed: ${e.message}`);
           await db.update(scenes)
-            .set({ image_status: "completed", image_file: `${num}.png`, image_attempts: (scene.image_attempts || 0) + 1, image_error: null, needs_review: false })
-            .where(eq(scenes.project_id, projectId)).where(eq(scenes.scene_number, num));
-        } else {
-          const svg = generateMockSVG(num, scene.image_prompt || "");
-          fs.writeFileSync(path.join(imgDir, `${num}.svg`), svg);
-          await db.update(scenes)
-            .set({ image_status: "completed", image_file: `${num}.svg`, image_attempts: (scene.image_attempts || 0) + 1, image_error: null, needs_review: false })
+            .set({ image_status: "failed", image_attempts: (scene.image_attempts || 0) + 1, image_error: e.message, needs_review: true })
             .where(eq(scenes.project_id, projectId)).where(eq(scenes.scene_number, num));
         }
-        console.log(`${projectId}: generate-missing scene ${num} image done`);
-      } catch (e: any) {
-        console.error(`${projectId} scene ${num}: generate-missing failed: ${e.message}`);
-        await db.update(scenes)
-          .set({ image_status: "failed", image_attempts: (scene.image_attempts || 0) + 1, image_error: e.message, needs_review: true })
-          .where(eq(scenes.project_id, projectId)).where(eq(scenes.scene_number, num));
-      }
 
-      const updated = await db.select().from(scenes).where(eq(scenes.project_id, projectId));
-      const statsUpdate = {
-        sceneCount: updated.length,
-        imagesCompleted: updated.filter(s => s.image_status === "completed").length,
-        audioCompleted: updated.filter(s => s.audio_status === "completed").length,
-        imagesFailed: updated.filter(s => s.image_status === "failed").length,
-        audioFailed: updated.filter(s => s.audio_status === "failed").length,
-        needsReviewCount: updated.filter(s => s.needs_review).length,
-        serverPipeline: true,
-      };
-      await db.update(projects).set({ stats: statsUpdate }).where(eq(projects.id, projectId));
+        const updated = await db.select().from(scenes).where(eq(scenes.project_id, projectId));
+        await db.update(projects).set({ stats: {
+          sceneCount: updated.length,
+          imagesCompleted: updated.filter(s => s.image_status === "completed").length,
+          audioCompleted: updated.filter(s => s.audio_status === "completed").length,
+          imagesFailed: updated.filter(s => s.image_status === "failed").length,
+          audioFailed: updated.filter(s => s.audio_status === "failed").length,
+          needsReviewCount: updated.filter(s => s.needs_review).length,
+          serverPipeline: true,
+        }}).where(eq(projects.id, projectId));
+      }
+    });
+    await Promise.all(workers);
+
+    if (stopped) {
+      console.log(`${projectId}: generate-missing stopped by user`);
+      return;
     }
 
     const final = await db.select().from(scenes).where(eq(scenes.project_id, projectId));
