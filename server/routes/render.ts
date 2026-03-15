@@ -240,9 +240,8 @@ router.get("/:id/download", (req: Request, res: Response) => {
 
 // ── Core functions ─────────────────────────────────────────────────────────
 
-const AUDIO_FILTER =
-  `silenceremove=start_periods=1:start_silence=0.05:start_threshold=-50dB:stop_periods=1:stop_silence=0.05:stop_threshold=-50dB,` +
-  `loudnorm=I=-16:LRA=11:TP=-1.5`;
+// silenceremove removed — stop_periods=1 terminates the stream on any inter-word pause
+const AUDIO_FILTER = `loudnorm=I=-16:LRA=11:TP=-1.5`;
 
 /**
  * Phase 1: generate one MP4 per scene, named by scene number (1.mp4, 2.mp4, …).
@@ -279,7 +278,9 @@ async function generateClips(projectId: string, sceneList: any[], width: number,
 
     await ffmpeg([
       "-y",
-      "-loop", "1", "-framerate", `${FPS}`, "-i", img,
+      // -t before -i img: limits the looped input to exactly dur seconds so
+      // zoompan receives the correct frame count and animates properly
+      "-loop", "1", "-framerate", `${FPS}`, "-t", `${dur}`, "-i", img,
       "-i", audioPath,
       "-filter_complex",
         `[0:v]${zp},fps=${FPS},format=yuv420p[v];` +
@@ -345,7 +346,7 @@ async function mergeVideo(projectId: string, sceneList: any[], width: number, he
       const clip = path.join(renderDir, `tmp_${i}.mp4`);
       await ffmpeg([
         "-y",
-        "-loop", "1", "-framerate", `${FPS}`, "-i", img,
+        "-loop", "1", "-framerate", `${FPS}`, "-t", `${dur}`, "-i", img,
         "-i", audioPath,
         "-filter_complex",
           `[0:v]${zp},fps=${FPS},format=yuv420p[v];[1:a]${AUDIO_FILTER}[a]`,
