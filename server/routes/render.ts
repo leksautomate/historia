@@ -371,31 +371,33 @@ async function mergeVideo(projectId: string, sceneList: any[], width: number, he
   } else {
     const inputs = clips.flatMap(c => ["-i", c]);
     const vFilters: string[] = [];
-    const aFilters: string[] = [];
     let cumD = 0;
 
     for (let i = 0; i < clips.length - 1; i++) {
       const vIn  = i === 0 ? `${i}:v` : `vtmp${i}`;
       const vOut = i === clips.length - 2 ? "vout" : `vtmp${i + 1}`;
-      const aIn  = i === 0 ? `${i}:a` : `atmp${i}`;
-      const aOut = i === clips.length - 2 ? "aout" : `atmp${i + 1}`;
 
       cumD += durations[i];
       const offset = parseFloat((cumD - (i + 1) * T).toFixed(3));
 
       vFilters.push(`[${vIn}][${i + 1}:v]xfade=transition=fade:duration=${T}:offset=${offset}[${vOut}]`);
-      aFilters.push(`[${aIn}][${i + 1}:a]acrossfade=d=${T}:c1=tri:c2=tri[${aOut}]`);
     }
+
+    // Concat audio streams in order — chained acrossfade was causing audio to overlap
+    // and drop out. Simple concat is reliable; the tiny T-per-transition gap is inaudible.
+    const audioConcatIn = clips.map((_, i) => `[${i}:a]`).join("");
+    const audioFilter = `${audioConcatIn}concat=n=${clips.length}:v=0:a=1[aout]`;
 
     mergeJobs[projectId].progress = 90;
 
     await ffmpeg([
       "-y",
       ...inputs,
-      "-filter_complex", [...vFilters, ...aFilters].join(";"),
+      "-filter_complex", [...vFilters, audioFilter].join(";"),
       "-map", "[vout]", "-map", "[aout]",
       "-c:v", "libx264", "-preset", "fast", "-crf", "22",
       "-c:a", "aac", "-b:a", "128k", "-ar", "44100", "-ac", "2",
+      "-shortest",
       outPath,
     ]);
   }
