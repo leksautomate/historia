@@ -232,14 +232,26 @@ router.post("/:id/animate", async (req: Request, res: Response) => {
 
 /** GET /api/render/:id/animate/status */
 router.get("/:id/animate/status", (req: Request, res: Response) => {
-  const job = animateJobs[req.params.id];
-  if (job) return res.json(job);
   const videosDir = path.join("uploads", req.params.id, "videos");
-  if (fs.existsSync(videosDir)) {
-    const vids = fs.readdirSync(videosDir).filter(f => f.endsWith(".mp4"));
-    if (vids.length > 0) return res.json({ status: "done", progress: 100, done: vids.length, total: vids.length, sceneErrors: {} });
+  const getAnimatedNums = (): number[] => {
+    if (!fs.existsSync(videosDir)) return [];
+    return fs.readdirSync(videosDir)
+      .filter(f => f.endsWith(".mp4"))
+      .map(f => parseInt(f))
+      .filter(n => !isNaN(n))
+      .sort((a, b) => a - b);
+  };
+
+  const job = animateJobs[req.params.id];
+  if (job) {
+    const animatedSceneNums = getAnimatedNums();
+    return res.json({ ...job, animatedSceneNums });
   }
-  res.json({ status: "idle", done: 0, total: 0, sceneErrors: {} });
+  const animatedSceneNums = getAnimatedNums();
+  if (animatedSceneNums.length > 0) {
+    return res.json({ status: "done", progress: 100, done: animatedSceneNums.length, total: animatedSceneNums.length, sceneErrors: {}, animatedSceneNums });
+  }
+  res.json({ status: "idle", done: 0, total: 0, sceneErrors: {}, animatedSceneNums: [] });
 });
 
 /**
@@ -327,10 +339,18 @@ router.get("/:id/status", (req: Request, res: Response) => {
 });
 
 /** GET /api/render/:id/download */
-router.get("/:id/download", (req: Request, res: Response) => {
+router.get("/:id/download", async (req: Request, res: Response) => {
   const outPath = path.join("uploads", req.params.id, "render", "output.mp4");
   if (!fs.existsSync(outPath)) return res.status(404).json({ error: "Render not found. Start a render first." });
-  res.download(outPath, "video.mp4");
+  let filename = "video.mp4";
+  try {
+    const [project] = await db.select({ title: projects.title }).from(projects).where(eq(projects.id, req.params.id));
+    if (project?.title) {
+      const safe = project.title.replace(/[^a-zA-Z0-9_\- ]/g, "").trim().replace(/\s+/g, "_").slice(0, 80);
+      if (safe) filename = `${safe}.mp4`;
+    }
+  } catch { /* fall back to video.mp4 */ }
+  res.download(outPath, filename);
 });
 
 // ── Core functions ─────────────────────────────────────────────────────────

@@ -130,7 +130,7 @@ export default function ProjectPreview() {
         startAnimatePolling(projectId);
       } else if (s.status === "done") {
         setAnimateStatus("done");
-        setAnimatedScenes(new Set(Array.from({ length: s.done ?? 0 }, (_, i) => i + 1)));
+        if (s.animatedSceneNums) setAnimatedScenes(new Set(s.animatedSceneNums));
       }
     }).catch(() => {});
     return () => { if (animatePollRef.current) clearInterval(animatePollRef.current); };
@@ -392,6 +392,7 @@ export default function ProjectPreview() {
           setAnimateStatus("done");
           clearInterval(animatePollRef.current!);
           if (s.sceneErrors) setAnimateSceneErrors(s.sceneErrors);
+          if (s.animatedSceneNums) setAnimatedScenes(new Set(s.animatedSceneNums));
           const failCount = Object.keys(s.sceneErrors ?? {}).length;
           if (s.done === 0) {
             toast.error(`Veo animation failed for all scenes. Check scene errors below.`);
@@ -702,8 +703,20 @@ export default function ProjectPreview() {
                         {s.image_status === "completed" && (
                           <button
                             onClick={e => { e.stopPropagation(); toggleAnimateScene(s.scene_number); }}
-                            className={`ml-0.5 rounded transition-colors ${animateSelected.has(s.scene_number) ? "text-info" : "text-muted-foreground hover:text-foreground"}`}
-                            title={animateSelected.has(s.scene_number) ? "Remove from Veo animation" : "Add to Veo animation"}
+                            className={`ml-0.5 rounded transition-colors ${
+                              animatedScenes.has(s.scene_number)
+                                ? "text-emerald-400"
+                                : animateSelected.has(s.scene_number)
+                                  ? "text-info"
+                                  : "text-muted-foreground hover:text-foreground"
+                            }`}
+                            title={
+                              animatedScenes.has(s.scene_number)
+                                ? "Already animated with Veo ✓"
+                                : animateSelected.has(s.scene_number)
+                                  ? "Remove from Veo animation"
+                                  : "Add to Veo animation"
+                            }
                           >
                             <Video className="h-2.5 w-2.5" />
                           </button>
@@ -753,17 +766,27 @@ export default function ProjectPreview() {
               <p className="text-xs text-foreground/80 leading-relaxed line-clamp-4">{scene.script_text}</p>
             </div>
             {scene.image_status === "completed" && (
-              <Button
-                size="sm"
-                variant={animateSelected.has(scene.scene_number) ? "default" : "outline"}
-                onClick={() => toggleAnimateScene(scene.scene_number)}
-                className="w-full"
-              >
-                {animateSelected.has(scene.scene_number)
-                  ? <><VideoOff className="h-3 w-3 mr-1" />Remove from Veo</>
-                  : <><Video className="h-3 w-3 mr-1" />Animate with Veo</>
-                }
-              </Button>
+              <>
+                {animatedScenes.has(scene.scene_number) && (
+                  <div className="flex items-center gap-1.5 text-xs text-emerald-400">
+                    <Video className="h-3 w-3" />
+                    <span>Animated with Veo ✓</span>
+                  </div>
+                )}
+                <Button
+                  size="sm"
+                  variant={animateSelected.has(scene.scene_number) ? "default" : "outline"}
+                  onClick={() => toggleAnimateScene(scene.scene_number)}
+                  className="w-full"
+                >
+                  {animateSelected.has(scene.scene_number)
+                    ? <><VideoOff className="h-3 w-3 mr-1" />Remove from Veo</>
+                    : animatedScenes.has(scene.scene_number)
+                      ? <><Video className="h-3 w-3 mr-1" />Re-animate with Veo</>
+                      : <><Video className="h-3 w-3 mr-1" />Animate with Veo</>
+                  }
+                </Button>
+              </>
             )}
           </div>
         </div>
