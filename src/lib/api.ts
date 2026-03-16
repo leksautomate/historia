@@ -617,6 +617,7 @@ export async function getAnimateStatus(projectId: string): Promise<{
   done: number;
   total: number;
   error?: string;
+  sceneErrors?: Record<number, string>;
 }> {
   return apiRequest(`/render/${projectId}/animate/status`);
 }

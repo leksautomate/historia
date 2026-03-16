@@ -76,6 +76,7 @@ type AnimateJob = {
   done: number;
   total: number;
   error?: string;
+  sceneErrors: Record<number, string>; // scene_number → error message
 };
 const animateJobs: Record<string, AnimateJob> = {};
 
@@ -221,7 +222,7 @@ router.post("/:id/animate", async (req: Request, res: Response) => {
   const toAnimate = allScenes.filter(s => sceneNums.includes(s.scene_number) && s.image_status === "completed");
   if (toAnimate.length === 0) return res.status(400).json({ error: "No scenes with completed images to animate" });
 
-  animateJobs[projectId] = { status: "animating", progress: 0, done: 0, total: toAnimate.length };
+  animateJobs[projectId] = { status: "animating", progress: 0, done: 0, total: toAnimate.length, sceneErrors: {} };
   res.json({ success: true, total: toAnimate.length });
 
   animateScenes(projectId, sceneNums, allScenes, cookie).catch(e => {
@@ -236,9 +237,9 @@ router.get("/:id/animate/status", (req: Request, res: Response) => {
   const videosDir = path.join("uploads", req.params.id, "videos");
   if (fs.existsSync(videosDir)) {
     const vids = fs.readdirSync(videosDir).filter(f => f.endsWith(".mp4"));
-    if (vids.length > 0) return res.json({ status: "done", progress: 100, done: vids.length, total: vids.length });
+    if (vids.length > 0) return res.json({ status: "done", progress: 100, done: vids.length, total: vids.length, sceneErrors: {} });
   }
-  res.json({ status: "idle" });
+  res.json({ status: "idle", done: 0, total: 0, sceneErrors: {} });
 });
 
 /**
@@ -573,6 +574,7 @@ async function animateScenes(
       console.log(`[animate] ${projectId}: scene ${num} done (${done}/${sceneNumbers.length})`);
     } catch (e: any) {
       console.error(`[animate] scene ${num} failed:`, e.message);
+      animateJobs[projectId].sceneErrors[num] = e.message;
     }
   }
   animateJobs[projectId] = { ...animateJobs[projectId], status: "done", progress: 100 };

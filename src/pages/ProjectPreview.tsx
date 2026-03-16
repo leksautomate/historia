@@ -57,6 +57,7 @@ export default function ProjectPreview() {
   const [animateTotal, setAnimateTotal] = useState(0);
   const [animatedScenes, setAnimatedScenes] = useState<Set<number>>(new Set());
   const [animateError, setAnimateError] = useState<string | null>(null);
+  const [animateSceneErrors, setAnimateSceneErrors] = useState<Record<number, string>>({});
   const animatePollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const audioRef = useRef<HTMLAudioElement>(null);
@@ -390,7 +391,15 @@ export default function ProjectPreview() {
         if (s.status === "done") {
           setAnimateStatus("done");
           clearInterval(animatePollRef.current!);
-          toast.success(`${s.total ?? s.done} scenes animated with Veo! Generate clips to use them.`);
+          if (s.sceneErrors) setAnimateSceneErrors(s.sceneErrors);
+          const failCount = Object.keys(s.sceneErrors ?? {}).length;
+          if (s.done === 0) {
+            toast.error(`Veo animation failed for all scenes. Check scene errors below.`);
+          } else if (failCount > 0) {
+            toast.warning(`${s.done} scenes animated, ${failCount} failed. See errors below.`);
+          } else {
+            toast.success(`${s.done} scenes animated with Veo! Generate clips to use them.`);
+          }
         } else if (s.status === "failed") {
           setAnimateStatus("failed");
           setAnimateError(s.error ?? "Unknown error");
@@ -499,14 +508,34 @@ export default function ProjectPreview() {
             )}
             {animateStatus === "done" && (
               <div className="flex items-center gap-1">
-                <CheckCircle2 className="h-3 w-3 text-success" />
-                <span className="text-xs text-muted-foreground">{animateTotal} animated</span>
-                {projectId && (
-                  <a href={getAnimateZipUrl(projectId)} download="animated-scenes.zip">
-                    <Button size="sm" variant="outline">
-                      <Video className="h-3 w-3 mr-1" />Veo ZIP
-                    </Button>
-                  </a>
+                {animateDone > 0
+                  ? <CheckCircle2 className="h-3 w-3 text-success" />
+                  : <AlertTriangle className="h-3 w-3 text-destructive" />}
+                <span className="text-xs text-muted-foreground">
+                  {animateDone}/{animateTotal} animated
+                  {Object.keys(animateSceneErrors).length > 0 && ` (${Object.keys(animateSceneErrors).length} failed)`}
+                </span>
+                {projectId && animateDone > 0 && (
+                  <Button size="sm" variant="outline" onClick={async () => {
+                    try {
+                      const r = await fetch(getAnimateZipUrl(projectId));
+                      if (!r.ok) { const e = await r.json().catch(() => ({})); throw new Error(e.error || `HTTP ${r.status}`); }
+                      const blob = await r.blob();
+                      const url = URL.createObjectURL(blob);
+                      const a = document.createElement("a"); a.href = url; a.download = "animated-scenes.zip"; a.click();
+                      URL.revokeObjectURL(url);
+                    } catch (e: any) { toast.error(`Download failed: ${e.message}`); }
+                  }}>
+                    <Video className="h-3 w-3 mr-1" />Veo ZIP
+                  </Button>
+                )}
+                {Object.keys(animateSceneErrors).length > 0 && (
+                  <Button size="sm" variant="ghost" onClick={() => {
+                    const msgs = Object.entries(animateSceneErrors).map(([n, e]) => `Scene ${n}: ${e}`).join("\n");
+                    toast.error(msgs, { duration: 8000 });
+                  }}>
+                    View errors
+                  </Button>
                 )}
               </div>
             )}
