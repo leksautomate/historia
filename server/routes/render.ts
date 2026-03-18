@@ -358,12 +358,45 @@ router.get("/:id/download", async (req: Request, res: Response) => {
 // silenceremove removed — stop_periods=1 terminates the stream on any inter-word pause
 const AUDIO_FILTER = `loudnorm=I=-16:LRA=11:TP=-1.5`;
 
+/** Subtle Ken Burns for Veo clips — zoom range 1.0–1.15 (vs 1.0–1.5 for stills) */
+function buildVeoZoompan(effect: KBEffect, frames: number, width: number, height: number): string {
+  const PAN_FRAC = 0.23077;
+  const spd_h = (PAN_FRAC / frames).toFixed(6);
+  const spd_v = (PAN_FRAC / frames).toFixed(6);
+  const size = `${width}x${height}`;
+  switch (effect) {
+    case "zoom-in": {
+      const inc = (0.15 / frames).toFixed(6);
+      return `zoompan=z='min(pzoom+${inc},1.15)':d=${frames}:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=${size}`;
+    }
+    case "zoom-out": {
+      const dec = (0.15 / frames).toFixed(6);
+      return `zoompan=z='if(eq(on,1),1.15,max(pzoom-${dec},1.0))':d=${frames}:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=${size}`;
+    }
+    case "pan-right":
+      return `zoompan=z=1.3:d=${frames}:x='min(px+iw*${spd_h},iw*(1-1/zoom))':y='ih/2-(ih/zoom/2)':s=${size}`;
+    case "pan-left":
+      return `zoompan=z=1.3:d=${frames}:x='if(eq(on,1),iw*(1-1/zoom),max(px-iw*${spd_h},0))':y='ih/2-(ih/zoom/2)':s=${size}`;
+    case "pan-up":
+      return `zoompan=z=1.3:d=${frames}:x='iw/2-(iw/zoom/2)':y='if(eq(on,1),ih*(1-1/zoom),max(py-ih*${spd_v},0))':s=${size}`;
+    case "pan-down":
+      return `zoompan=z=1.3:d=${frames}:x='iw/2-(iw/zoom/2)':y='min(py+ih*${spd_v},ih*(1-1/zoom))':s=${size}`;
+  }
+}
+
 async function buildVeoClip(
   veoPath: string, audioPath: string, dur: number,
   width: number, height: number, outPath: string
 ): Promise<void> {
   const veoAudio = hasAudioStream(veoPath);
-  const vScale = `scale=${width}:${height}:flags=lanczos,setsar=1,fps=25,format=yuv420p`;
+  const FPS = 25;
+  const frames = Math.ceil(dur * FPS);
+  const effect = pickEffect();
+  const kbFilter = buildVeoZoompan(effect, frames, width, height);
+  // Scale up 1.3× to give zoompan room to crop, then back down to target
+  const sw = Math.round(width * 1.3 / 2) * 2;
+  const sh = Math.round(height * 1.3 / 2) * 2;
+  const vScale = `scale=${sw}:${sh}:flags=lanczos,${kbFilter},scale=${width}:${height},setsar=1,fps=${FPS},format=yuv420p`;
 
   if (veoAudio) {
     await ffmpeg([

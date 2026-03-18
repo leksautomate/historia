@@ -1,6 +1,6 @@
 import fs from "fs";
 import path from "path";
-import { Whisk, VideoGenerationModel } from "@rohitaryal/whisk-api";
+import { Whisk, Media, VideoGenerationModel } from "@rohitaryal/whisk-api";
 
 function decodeEncodedImage(encodedImage: string): Uint8Array {
   const binary = atob(encodedImage);
@@ -95,7 +95,27 @@ export async function animateWhiskImage(
   const whisk = new Whisk(cookie);
   const project = await whisk.newProject("Historia-Animate-" + Date.now());
   const mediaRef = await project.addSubject({ file: imagePath });
-  const imageMedia = await Whisk.getMedia(mediaRef.mediaGenerationId, whisk.account);
+
+  // Read local image as base64 for the Media object.
+  // Whisk.getMedia() on an uploaded subject returns undefined aspectRatio,
+  // causing animate() to throw "only landscape images can be animated".
+  // We construct the Media object directly with the correct aspectRatio.
+  const imgBuffer = fs.readFileSync(imagePath);
+  const ext = path.extname(imagePath).toLowerCase().replace(".", "").replace("jpg", "jpeg");
+  const encodedMedia = `data:image/${ext || "png"};base64,${imgBuffer.toString("base64")}`;
+
+  const imageMedia = new (Media as any)({
+    seed: 0,
+    prompt: mediaRef.prompt,
+    workflowId: (project as any).projectId,
+    encodedMedia,
+    mediaGenerationId: mediaRef.mediaGenerationId,
+    aspectRatio: "IMAGE_ASPECT_RATIO_LANDSCAPE",
+    mediaType: "IMAGE",
+    model: "IMAGEN_3_5",
+    account: (whisk as any).account,
+  });
+
   const videoMedia = await imageMedia.animate(videoScript, VideoGenerationModel.VEO_3_1);
   const binary = atob(videoMedia.encodedMedia);
   const bytes = new Uint8Array(binary.length);
