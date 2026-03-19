@@ -10,6 +10,27 @@ import { animateWhiskImage } from "../lib/whisk.js";
 
 const router = express.Router();
 
+// ── External render API ────────────────────────────────────────────────────
+const RENDER_API = (process.env.RENDER_API_URL ?? "http://5.189.146.143").replace(/\/$/, "");
+const RENDER_API_KEY = process.env.RENDER_API_KEY ?? "";
+const SERVER_URL = (process.env.SERVER_URL ?? "http://localhost:5000").replace(/\/$/, "");
+
+async function callRenderApi(endpoint: string, body: object): Promise<any> {
+  const res = await fetch(`${RENDER_API}${endpoint}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-API-Key": RENDER_API_KEY },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error(`Render API ${endpoint} failed: ${res.status} ${await res.text()}`);
+  return res.json();
+}
+
+async function downloadFile(url: string, localPath: string): Promise<void> {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`Download failed: ${url} → ${res.status}`);
+  fs.writeFileSync(localPath, Buffer.from(await res.arrayBuffer()));
+}
+
 // ── Ken Burns effect types ─────────────────────────────────────────────────
 type KBEffect = "zoom-in" | "zoom-out" | "pan-right" | "pan-left" | "pan-up" | "pan-down";
 const KB_EFFECTS: KBEffect[] = ["zoom-in", "zoom-out", "pan-right", "pan-left", "pan-up", "pan-down"];
@@ -18,6 +39,15 @@ function pickEffect(prev?: KBEffect): KBEffect {
   const pool = prev ? KB_EFFECTS.filter(e => e !== prev) : KB_EFFECTS;
   return pool[Math.floor(Math.random() * pool.length)];
 }
+
+const KB_TO_API: Record<KBEffect, string> = {
+  "zoom-in":   "zoom_in",
+  "zoom-out":  "zoom_out",
+  "pan-right": "pan_right",
+  "pan-left":  "pan_left",
+  "pan-up":    "pan_zoom",
+  "pan-down":  "pan_zoom",
+};
 
 /**
  * Ken Burns using scale+crop with FFmpeg `t` (timestamp) expressions.
@@ -449,20 +479,31 @@ async function generateClips(projectId: string, sceneList: any[], width: number,
     } else {
       const effect = pickEffect(prevEffect);
       prevEffect = effect;
-      const kbFilter = buildKB(effect, dur, width, height, 1.3);
-      await ffmpeg([
-        "-y",
-        "-loop", "1", "-framerate", `${FPS}`, "-t", `${dur}`, "-i", img,
-        "-i", audioPath,
-        "-filter_complex",
-          `[0:v]${kbFilter},setsar=1,fps=${FPS},format=yuv420p[v];` +
-          `[1:a]${AUDIO_FILTER}[a]`,
-        "-map", "[v]", "-map", "[a]",
-        "-t", `${dur}`,
-        "-c:v", "libx264", "-preset", "fast", "-crf", "22",
-        "-c:a", "aac", "-b:a", "128k", "-ar", "44100", "-ac", "2",
-        clipPath,
-      ]);
+      const imgUrl   = `${SERVER_URL}/${img.replace(/\\/g, "/")}`;
+      const audioUrl = `${SERVER_URL}/uploads/${projectId}/audio/${s.audio_file ?? `${num}.mp3`}`;
+      console.log(`[clips] scene ${num}: calling render API (${KB_TO_API[effect]}, ${dur}s)`);
+
+      // 1. Animate still image with Ken Burns via external render API
+      const animRes = await callRenderApi("/animate", {
+        media_url:  imgUrl,
+        media_type: "image",
+        animation:  KB_TO_API[effect],
+        duration:   dur,
+        fps:        FPS,
+        resolution: `${width}x${height}`,
+        folder:     projectId,
+      });
+
+      // 2. Merge animated video with narration audio
+      const mergeRes = await callRenderApi("/merge", {
+        video_url: animRes.url,
+        audio_url: audioUrl,
+        strategy:  "trim_or_slow",
+        folder:    projectId,
+      });
+
+      // 3. Download finished clip locally
+      await downloadFile(mergeRes.url, clipPath);
     }
 
     done++;
@@ -514,20 +555,27 @@ async function mergeVideo(projectId: string, sceneList: any[], width: number, he
       const dur = parseFloat(getAudioDuration(audioPath).toFixed(3));
       const effect = pickEffect(prevEffect);
       prevEffect = effect;
-      const kbFilter = buildKB(effect, dur, width, height, 1.3);
+      const imgUrl   = `${SERVER_URL}/${img.replace(/\\/g, "/")}`;
+      const audioUrl = `${SERVER_URL}/uploads/${projectId}/audio/${s.audio_file ?? `${num}.mp3`}`;
       const clip = path.join(renderDir, `tmp_${i}.mp4`);
-      await ffmpeg([
-        "-y",
-        "-loop", "1", "-framerate", `${FPS}`, "-t", `${dur}`, "-i", img,
-        "-i", audioPath,
-        "-filter_complex",
-          `[0:v]${kbFilter},setsar=1,fps=${FPS},format=yuv420p[v];[1:a]${AUDIO_FILTER}[a]`,
-        "-map", "[v]", "-map", "[a]",
-        "-t", `${dur}`,
-        "-c:v", "libx264", "-preset", "fast", "-crf", "22",
-        "-c:a", "aac", "-b:a", "128k", "-ar", "44100", "-ac", "2",
-        clip,
-      ]);
+      console.log(`[merge-inline] scene ${num}: calling render API (${KB_TO_API[effect]}, ${dur}s)`);
+
+      const animRes = await callRenderApi("/animate", {
+        media_url:  imgUrl,
+        media_type: "image",
+        animation:  KB_TO_API[effect],
+        duration:   dur,
+        fps:        FPS,
+        resolution: `${width}x${height}`,
+        folder:     projectId,
+      });
+      const mergeRes = await callRenderApi("/merge", {
+        video_url: animRes.url,
+        audio_url: audioUrl,
+        strategy:  "trim_or_slow",
+        folder:    projectId,
+      });
+      await downloadFile(mergeRes.url, clip);
       clips.push(clip);
       tempClips.push(clip);
       durations.push(getAudioDuration(clip));
@@ -539,40 +587,21 @@ async function mergeVideo(projectId: string, sceneList: any[], width: number, he
 
   const outPath = path.join(renderDir, "output.mp4");
 
+  mergeJobs[projectId].progress = 90;
+
   if (clips.length === 1) {
     fs.copyFileSync(clips[0], outPath);
   } else {
-    const inputs = clips.flatMap(c => ["-i", c]);
-    const vFilters: string[] = [];
-    let cumD = 0;
-
-    for (let i = 0; i < clips.length - 1; i++) {
-      const vIn  = i === 0 ? `${i}:v` : `vtmp${i}`;
-      const vOut = i === clips.length - 2 ? "vout" : `vtmp${i + 1}`;
-
-      cumD += durations[i];
-      const offset = parseFloat((cumD - (i + 1) * T).toFixed(3));
-
-      vFilters.push(`[${vIn}][${i + 1}:v]xfade=transition=fade:duration=${T}:offset=${offset}[${vOut}]`);
-    }
-
-    // Concat audio streams in order — chained acrossfade was causing audio to overlap
-    // and drop out. Simple concat is reliable; the tiny T-per-transition gap is inaudible.
-    const audioConcatIn = clips.map((_, i) => `[${i}:a]`).join("");
-    const audioFilter = `${audioConcatIn}concat=n=${clips.length}:v=0:a=1[aout]`;
-
-    mergeJobs[projectId].progress = 90;
-
-    await ffmpeg([
-      "-y",
-      ...inputs,
-      "-filter_complex", [...vFilters, audioFilter].join(";"),
-      "-map", "[vout]", "-map", "[aout]",
-      "-c:v", "libx264", "-preset", "fast", "-crf", "22",
-      "-c:a", "aac", "-b:a", "128k", "-ar", "44100", "-ac", "2",
-      "-shortest",
-      outPath,
-    ]);
+    // Use external render API to concat with fade transitions
+    const clipUrls = clips.map(c => `${SERVER_URL}/${c.replace(/\\/g, "/")}`);
+    console.log(`[merge] ${projectId}: concat-transitions (${clipUrls.length} clips)`);
+    const concatRes = await callRenderApi("/concat-transitions", {
+      urls:                clipUrls,
+      transition:          "fade",
+      transition_duration: 0.5,
+      folder:              projectId,
+    });
+    await downloadFile(concatRes.url, outPath);
   }
 
   // Clean up only inline temp clips (keep clips/ dir intact)
