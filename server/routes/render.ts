@@ -176,6 +176,28 @@ function hasAudioStream(file: string): boolean {
 // ── Routes ─────────────────────────────────────────────────────────────────
 
 /**
+ * GET /api/render/health
+ * Pings the external render API and reports connectivity + response time.
+ */
+router.get("/health", async (_req: Request, res: Response) => {
+  const url = RENDER_API;
+  const start = Date.now();
+  try {
+    const r = await fetch(`${url}/health`, {
+      method: "GET",
+      headers: { "X-API-Key": RENDER_API_KEY },
+      signal: AbortSignal.timeout(5000),
+    });
+    const ms = Date.now() - start;
+    // Accept any HTTP response — a 404 still means the server is reachable
+    return res.json({ ok: true, url, status: r.status, ms });
+  } catch (e: any) {
+    const ms = Date.now() - start;
+    return res.json({ ok: false, url, ms, error: e.message ?? "Unreachable" });
+  }
+});
+
+/**
  * POST /api/render/:id/clips
  * Phase 1: generate individual MP4 clips (1.mp4, 2.mp4, …) into uploads/{id}/clips/
  * Each clip duration = audio duration, Ken Burns effect applied.

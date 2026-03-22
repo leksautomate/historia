@@ -37,6 +37,8 @@ export default function Settings() {
   const [whiskMsg, setWhiskMsg] = useState("");
   const [inworldStatus, setInworldStatus] = useState<HealthStatus>("idle");
   const [inworldMsg, setInworldMsg] = useState("");
+  const [renderStatus, setRenderStatus] = useState<HealthStatus>("idle");
+  const [renderMsg, setRenderMsg] = useState("");
 
   const save = () => {
     saveProviderSettings(settings);
@@ -109,10 +111,29 @@ export default function Settings() {
     }
   };
 
+  const testRenderApi = async () => {
+    setRenderStatus("checking"); setRenderMsg("");
+    try {
+      const res = await fetch("/api/render/health");
+      const data = await res.json();
+      if (data.ok) {
+        setRenderStatus("ok");
+        setRenderMsg(`${data.ms}ms · ${data.url}`);
+      } else {
+        setRenderStatus("error");
+        setRenderMsg(data.error ?? `HTTP ${data.status}`);
+      }
+    } catch (e: any) {
+      setRenderStatus("error");
+      setRenderMsg("Could not reach server");
+    }
+  };
+
   const testAll = () => {
     testGroq();
     testWhisk();
     testInworld();
+    testRenderApi();
   };
 
   return (
@@ -209,6 +230,35 @@ export default function Settings() {
             <p className="text-xs text-muted-foreground">
               Inworld TTS API key (Base64). Get one at inworld.ai
             </p>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Render API */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg font-display">Render API</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-foreground">FFmpeg Render Server</p>
+              <p className="text-xs text-muted-foreground">Handles Ken Burns animation, video merging, and transitions</p>
+            </div>
+            <div className="flex items-center gap-2">
+              {renderStatus !== "idle" && (
+                <div className="space-y-1 text-right">
+                  <StatusIndicator status={renderStatus} />
+                  {renderMsg && <p className="text-xs text-muted-foreground max-w-[200px] truncate">{renderMsg}</p>}
+                </div>
+              )}
+              <Button variant="outline" size="sm" onClick={testRenderApi} className="text-xs h-7">
+                {renderStatus === "checking" ? <Loader2 className="h-3 w-3 animate-spin" /> : "Test Connection"}
+              </Button>
+            </div>
+          </div>
+          <div className="rounded-md bg-secondary px-3 py-2 text-xs text-muted-foreground space-y-1">
+            <p><span className="text-foreground font-medium">Endpoints:</span> /animate · /merge · /concat-transitions</p>
           </div>
         </CardContent>
       </Card>
