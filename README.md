@@ -85,11 +85,27 @@ Historia automates the production pipeline for historical documentary content:
 - **Per-scene voice** — override the default voice for individual scenes
 - **Image & audio regeneration** — regenerate individual assets with updated prompts
 
+### Failed Scene Recovery
+- **"N Failed" button** — appears in the preview toolbar when any scenes have failed images or audio
+- **Images panel** — checkboxes to select individual failed image scenes; "All" shortcut; "Regen Images" regenerates in sequence
+- **Audio panel** — same for failed audio scenes
+- **Auto mock cleanup** — on project load, any legacy SVG placeholder files are detected, deleted, and the scene is reset to `failed` so it can be regenerated with a real provider
+
 ### Settings & Health Checks
+- **Render API health check** — shown at the top of Settings; "Test Connection" verifies the FFmpeg VPS is reachable
 - **API connection testing** — test each provider (Groq, Whisk, Inworld) with one click
 - **Green/red status indicators** — instant visual feedback with detailed error messages
 - **Custom voice management** — add/remove custom Inworld voice IDs
 - **"Test All Connections"** button for quick verification of your entire setup
+- **No mock providers** — mock image/audio generation has been removed; misconfigured providers fail with a clear error message
+
+## External Services (VPS)
+
+| Service | URL | Purpose |
+|---|---|---|
+| Historia app | `http://5.189.146.143:3001` | Main deployment |
+| Whisk VPS proxy | `http://5.189.146.143:3050` | Image gen + Veo animation |
+| FFmpeg render API | `http://5.189.146.143:9000` | Ken Burns, clip merge, transitions |
 
 ## Tech Stack
 
@@ -100,9 +116,10 @@ Historia automates the production pipeline for historical documentary content:
 | Backend | Express.js (Node.js) |
 | Database | PostgreSQL (via Drizzle ORM) |
 | AI — Script | Groq API (openai/gpt-oss-120b, 131k context) |
-| AI — Images | Google Whisk (Imagen 3.5) with style reference support |
-| AI — Video | Google Veo 3.1 (image-to-video, via Whisk API) |
+| AI — Images | Google Whisk (Imagen 3.5) via VPS proxy |
+| AI — Video | Google Veo 3.1 (I2V) via VPS proxy |
 | AI — TTS | Inworld AI (TTS 1.5 Max, 100 RPS) |
+| Video | FFmpeg — Ken Burns (`scale+crop+t`), loudnorm, xfade |
 
 ## Setup
 
@@ -153,6 +170,12 @@ Create a `.env` file in the project root:
 ```env
 PORT=3001
 DATABASE_URL=postgresql://historia:yourpassword@localhost:5432/historia
+
+# VPS external services
+RENDER_API_URL=http://5.189.146.143:9000
+RENDER_API_KEY=alliswell
+WHISK_VPS_URL=http://5.189.146.143:3050
+SERVER_URL=http://5.189.146.143:3001   # public URL of this server
 
 # Optional — can also be configured in the app's Settings page
 WHISK_COOKIE=<your whisk session cookie>
@@ -266,9 +289,11 @@ systemctl status postgresql
 npm run db:push
 ```
 
-### Images generating as SVG placeholders
+### Images show as failed / need regeneration
 
-Mock mode is active. Make sure **Whisk** is selected as the image provider in Settings and your cookie is valid.
+If you had SVG placeholder images from an older build, they are automatically cleared on project load. Open the project in Preview — if a red **"N Failed"** button appears in the toolbar, click it, select all failed images, and hit **Regen Images**. Make sure your Whisk cookie is valid first (Settings → Test Whisk).
+
+> Mock image/audio generation has been fully removed. If a provider is not configured, generation fails with a clear error instead of saving a placeholder.
 
 ## Error Handling
 
