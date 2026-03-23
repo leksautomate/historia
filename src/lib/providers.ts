@@ -140,6 +140,19 @@ VISUAL STYLE:
 - Images must feel like film stills from a prestige historical epic or documentary reconstruction photography
 - No fantasy, no video game look, no cartoon, no neon, no sci-fi, no modern elements
 
+VISUAL MAP:
+- MAP STYLE:
+- Base: Topographical relief on aged, tea-stained parchment.
+- Detail: 1900s military cartography, hand-inked contour lines, no digital labels.
+- Vibe: A physical artifact from a 1905 general’s war room.
+- MAP ANIMATION:
+- Animated arrows showing troop movement OR LOCATION
+
+XAMPLE PROMPT FOR MAP:
+
+"A cinematic 16:9 still of a concealed Japanese artillery battery firing from behind a mountain ridge, heavy smoke, 1905 uniforms, VISUAL STYLE: Cinematic historical realism, photographic documentary, Caravaggio-level contrast, no fantasy, muted earth tones."
+
+
 PEOPLE — STRICT ANONYMITY:
 - All figures must be anonymous: warriors, commanders, soldiers — never identifiable by face
 - Faces must be obscured by helmets/hoods/shadow, turned away, silhouetted, or blurred by depth of field
@@ -166,6 +179,7 @@ HISTORICAL PERIOD ACCURACY — match weapons/armor/environment to the period in 
 - Mongol: composite bows on horseback, lamellar armor, open steppe
 - Medieval Crusades: iron chainmail, kite shields, siege towers, walled city backgrounds
 - Roman: lorica segmentata, scutum shields, formation marching, stone roads and fortifications
+- THE MAP
 
 RESTRICTIONS: No text overlays, no identifiable faces, no fantasy/sci-fi/modern brands
 
@@ -662,35 +676,3 @@ Return ONLY the prompt text — one sentence ending with a period. No JSON, no m
   return content.trim();
 }
 
-// ========================
-// Mock fallbacks
-// ========================
-
-export function generateMockSVG(sceneNumber: number, prompt: string): Blob {
-  const truncated = prompt.substring(0, 60) + (prompt.length > 60 ? "..." : "");
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720">
-  <defs><linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" style="stop-color:#1a1a2e;stop-opacity:1" /><stop offset="100%" style="stop-color:#16213e;stop-opacity:1" /></linearGradient></defs>
-  <rect width="1280" height="720" fill="url(#bg)"/>
-  <text x="640" y="300" font-family="serif" font-size="72" fill="#c9a84c" text-anchor="middle" font-weight="bold">${sceneNumber}</text>
-  <text x="640" y="380" font-family="sans-serif" font-size="18" fill="#888" text-anchor="middle">MOCK IMAGE</text>
-  <text x="640" y="430" font-family="sans-serif" font-size="14" fill="#666" text-anchor="middle">${truncated.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")}</text>
-</svg>`;
-  return new Blob([svg], { type: "image/svg+xml" });
-}
-
-export function generateMockAudio(): Blob {
-  const header = new Uint8Array([
-    0xFF, 0xFB, 0x90, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-  ]);
-  const frames: Uint8Array[] = [];
-  for (let i = 0; i < 38; i++) frames.push(header);
-  const total = frames.reduce((s, f) => s + f.length, 0);
-  const result = new Uint8Array(total);
-  let offset = 0;
-  for (const f of frames) { result.set(f, offset); offset += f.length; }
-  return new Blob([result], { type: "audio/mpeg" });
-}

@@ -280,7 +280,6 @@ export default function Settings() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="whisk">Whisk (Imagen 3.5)</SelectItem>
-                <SelectItem value="mock">Mock (SVG Placeholders)</SelectItem>
               </SelectContent>
             </Select>
             {settings.imageProvider === "whisk" && !settings.whiskCookie && (
@@ -319,7 +318,6 @@ export default function Settings() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="inworld">Inworld AI</SelectItem>
-                <SelectItem value="mock">Mock (Silent Audio)</SelectItem>
               </SelectContent>
             </Select>
             {settings.ttsProvider === "inworld" && !settings.inworldApiKey && (

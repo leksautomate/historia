@@ -27,27 +27,6 @@ async function generateInworldAudio(text: string, apiKey: string, voiceId: strin
   return Buffer.from(data.audioContent, "base64");
 }
 
-function generateMockSVG(sceneNumber: number, prompt: string): string {
-  const truncated = prompt.substring(0, 60) + (prompt.length > 60 ? "..." : "");
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720">
-  <defs><linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" style="stop-color:#1a1a2e"/><stop offset="100%" style="stop-color:#16213e"/></linearGradient></defs>
-  <rect width="1280" height="720" fill="url(#bg)"/>
-  <text x="640" y="300" font-family="serif" font-size="72" fill="#c9a84c" text-anchor="middle" font-weight="bold">${sceneNumber}</text>
-  <text x="640" y="380" font-family="sans-serif" font-size="18" fill="#888" text-anchor="middle">MOCK IMAGE</text>
-  <text x="640" y="430" font-family="sans-serif" font-size="14" fill="#666" text-anchor="middle">${truncated.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")}</text>
-</svg>`;
-}
-
-function generateMockAudio(): Buffer {
-  const header = Buffer.from([
-    0xFF, 0xFB, 0x90, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-  ]);
-  return Buffer.concat(Array(38).fill(header));
-}
 
 router.post("/", async (req: Request, res: Response) => {
   try {
@@ -60,8 +39,8 @@ router.post("/", async (req: Request, res: Response) => {
 
     const [project] = await db.select().from(projects).where(eq(projects.id, projectId));
     const settings = (project?.settings as any) || {};
-    const imageProvider = settings.imageProvider || "mock";
-    const ttsProvider = settings.ttsProvider || "mock";
+    const imageProvider = settings.imageProvider || "whisk";
+    const ttsProvider = settings.ttsProvider || "inworld";
     const voiceId = voiceOverride || scene.voice_id || settings.voiceId || "Dennis";
     const modelId = settings.modelId || "inworld-tts-1.5-max";
 
@@ -87,8 +66,7 @@ router.post("/", async (req: Request, res: Response) => {
           if (!bytes) throw new Error("All Whisk prompts failed");
           fs.writeFileSync(path.join(imgDir, `${sceneNumber}.png`), bytes);
         } else {
-          const svg = generateMockSVG(sceneNumber, scene.image_prompt || "");
-          fs.writeFileSync(path.join(imgDir, `${sceneNumber}.svg`), svg);
+          throw new Error("No image provider configured. Set imageProvider to 'whisk' in project settings.");
         }
         await db.update(scenes).set({
           image_status: "completed",
@@ -115,7 +93,7 @@ router.post("/", async (req: Request, res: Response) => {
         if (ttsProvider === "inworld" && inworldKey) {
           bytes = await generateInworldAudio(scene.tts_text || scene.script_text || "", inworldKey, voiceId, modelId);
         } else {
-          bytes = generateMockAudio();
+          throw new Error("No TTS provider configured. Set ttsProvider to 'inworld' in project settings.");
         }
         fs.writeFileSync(path.join(audioDir, `${sceneNumber}.mp3`), bytes);
         await db.update(scenes).set({

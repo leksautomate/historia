@@ -205,7 +205,7 @@ async function runAssetPipeline(projectId: string) {
     if (!project) return;
 
     const settings = (project.settings as any) || {};
-    const imageProvider: string = settings.imageProvider || "mock";
+    const imageProvider: string = settings.imageProvider || "whisk";
     const ttsProvider: string = settings.ttsProvider || "mock";
     const voiceId: string = settings.voiceId || "Dennis";
     const modelId: string = settings.modelId || "inworld-tts-1.5-max";
@@ -284,8 +284,7 @@ async function runAssetPipeline(projectId: string) {
             if (!bytes) throw new Error(lastWhiskError);
             fs.writeFileSync(path.join(imgDir, `${num}.png`), bytes);
           } else {
-            const svg = generateMockSVG(num, scene.image_prompt || "");
-            fs.writeFileSync(path.join(imgDir, `${num}.svg`), svg);
+            throw new Error("No image provider configured. Set imageProvider to 'whisk' in project settings.");
           }
           await db.update(scenes).set({ image_status: "completed", image_attempts: 1 })
             .where(eq(scenes.project_id, projectId)).where(eq(scenes.scene_number, num));
@@ -334,8 +333,7 @@ async function runAssetPipeline(projectId: string) {
           if (!bytes) throw new Error(lastAudioError);
           fs.writeFileSync(path.join(audioDir, `${num}.mp3`), bytes);
         } else {
-          const bytes = generateMockAudio();
-          fs.writeFileSync(path.join(audioDir, `${num}.mp3`), bytes);
+          throw new Error("No TTS provider configured. Set ttsProvider to 'inworld' in project settings.");
         }
         await db.update(scenes).set({ audio_status: "completed", audio_attempts: 1 })
           .where(eq(scenes.project_id, projectId)).where(eq(scenes.scene_number, num));
@@ -380,27 +378,6 @@ async function generateInworldAudio(text: string, apiKey: string, voiceId: strin
   return Buffer.from(data.audioContent, "base64");
 }
 
-function generateMockSVG(sceneNumber: number, prompt: string): string {
-  const truncated = prompt.substring(0, 60) + (prompt.length > 60 ? "..." : "");
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720">
-  <defs><linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" style="stop-color:#1a1a2e;stop-opacity:1" /><stop offset="100%" style="stop-color:#16213e;stop-opacity:1" /></linearGradient></defs>
-  <rect width="1280" height="720" fill="url(#bg)"/>
-  <text x="640" y="300" font-family="serif" font-size="72" fill="#c9a84c" text-anchor="middle" font-weight="bold">${sceneNumber}</text>
-  <text x="640" y="380" font-family="sans-serif" font-size="18" fill="#888" text-anchor="middle">MOCK IMAGE</text>
-  <text x="640" y="430" font-family="sans-serif" font-size="14" fill="#666" text-anchor="middle">${truncated.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")}</text>
-</svg>`;
-}
-
-function generateMockAudio(): Buffer {
-  const header = Buffer.from([
-    0xFF, 0xFB, 0x90, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-  ]);
-  return Buffer.concat(Array(38).fill(header));
-}
 
 async function runMissingImageGeneration(projectId: string) {
   try {
@@ -408,7 +385,7 @@ async function runMissingImageGeneration(projectId: string) {
     if (!project) return;
 
     const settings = (project.settings as any) || {};
-    const imageProvider: string = settings.imageProvider || "mock";
+    const imageProvider: string = settings.imageProvider || "whisk";
 
     const allScenes = await db.select().from(scenes)
       .where(eq(scenes.project_id, projectId))
@@ -480,11 +457,7 @@ async function runMissingImageGeneration(projectId: string) {
               .set({ image_status: "completed", image_file: `${num}.png`, image_attempts: (scene.image_attempts || 0) + 1, image_error: null, needs_review: false })
               .where(eq(scenes.project_id, projectId)).where(eq(scenes.scene_number, num));
           } else {
-            const svg = generateMockSVG(num, scene.image_prompt || "");
-            fs.writeFileSync(path.join(imgDir, `${num}.svg`), svg);
-            await db.update(scenes)
-              .set({ image_status: "completed", image_file: `${num}.svg`, image_attempts: (scene.image_attempts || 0) + 1, image_error: null, needs_review: false })
-              .where(eq(scenes.project_id, projectId)).where(eq(scenes.scene_number, num));
+            throw new Error("No image provider configured. Set imageProvider to 'whisk' in project settings.");
           }
           console.log(`${projectId}: generate-missing scene ${num} image done`);
         } catch (e: any) {
@@ -613,11 +586,11 @@ router.post("/:id/scenes", async (req: Request, res: Response) => {
     const hasWhiskCookie = !!process.env.WHISK_COOKIE;
     const hasInworldKey = !!process.env.INWORLD_API_KEY;
     const projectSettings = (await db.select({ settings: projects.settings }).from(projects).where(eq(projects.id, projectId)))[0]?.settings as any;
-    const imageProvider = projectSettings?.imageProvider || "mock";
-    const ttsProvider = projectSettings?.ttsProvider || "mock";
+    const imageProvider = projectSettings?.imageProvider || "whisk";
+    const ttsProvider = projectSettings?.ttsProvider || "inworld";
 
-    const serverCanHandleImages = imageProvider === "mock" || (imageProvider === "whisk" && hasWhiskCookie);
-    const serverCanHandleAudio = ttsProvider === "mock" || (ttsProvider === "inworld" && hasInworldKey);
+    const serverCanHandleImages = imageProvider === "whisk" && hasWhiskCookie;
+    const serverCanHandleAudio = ttsProvider === "inworld" && hasInworldKey;
     const serverPipeline = serverCanHandleImages && serverCanHandleAudio;
 
     await db.update(projects).set({
@@ -693,5 +666,39 @@ router.patch("/:id", async (req: Request, res: Response) => {
   }
 });
 
-export { runAssetPipeline, generateInworldAudio, generateMockSVG, generateMockAudio };
+/** POST /api/projects/:id/fix-mocks
+ * Scans scenes with .svg image_file (mock placeholders) and resets them to failed
+ * so the user can regenerate them with a real provider.
+ */
+router.post("/:id/fix-mocks", async (req: Request, res: Response) => {
+  try {
+    const projectId = req.params.id;
+    const allScenes = await db.select().from(scenes).where(eq(scenes.project_id, projectId));
+    let fixed = 0;
+    for (const scene of allScenes) {
+      const isMock =
+        (scene.image_file && scene.image_file.endsWith(".svg")) ||
+        (() => {
+          const svgPath = path.join("uploads", projectId, "images", `${scene.scene_number}.svg`);
+          const pngPath = path.join("uploads", projectId, "images", `${scene.scene_number}.png`);
+          return fs.existsSync(svgPath) && !fs.existsSync(pngPath);
+        })();
+      if (isMock) {
+        // Delete the svg file so it doesn't get served
+        const svgPath = path.join("uploads", projectId, "images", `${scene.scene_number}.svg`);
+        if (fs.existsSync(svgPath)) fs.unlinkSync(svgPath);
+        await db.update(scenes)
+          .set({ image_status: "failed", image_file: null, image_error: "Mock placeholder — click Regen Image to generate a real image.", needs_review: true })
+          .where(eq(scenes.project_id, projectId))
+          .where(eq(scenes.scene_number, scene.scene_number));
+        fixed++;
+      }
+    }
+    res.json({ success: true, fixed });
+  } catch (e: any) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+export { runAssetPipeline, generateInworldAudio };
 export default router;

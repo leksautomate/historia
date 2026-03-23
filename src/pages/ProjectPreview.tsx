@@ -66,6 +66,8 @@ export default function ProjectPreview() {
   const fetchData = useCallback(async () => {
     if (!projectId) return;
     try {
+      // Reset any mock-placeholder scenes to failed so user can regenerate them
+      await fetch(`/api/projects/${projectId}/fix-mocks`, { method: "POST" }).catch(() => {});
       const data = await getProject(projectId);
       setProjectTitle(data.project.title);
       setProjectStatus(data.project.status);

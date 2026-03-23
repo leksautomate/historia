@@ -6,8 +6,6 @@ import {
   splitScriptIntoChunks,
   generateWhiskImage,
   generateInworldAudio,
-  generateMockSVG,
-  generateMockAudio,
   type SceneManifest,
 } from "./providers";
 
@@ -248,7 +246,7 @@ export async function runClientSidePipeline(
           }
           if (!success) throw new Error(lastWhiskError);
         } else {
-          imageBlob = generateMockSVG(num, scene.image_prompt || "");
+          throw new Error("No image provider configured. Please set up Whisk in Settings.");
         }
 
         const fd = new FormData();
@@ -301,7 +299,7 @@ export async function runClientSidePipeline(
           }
           if (!audioBlob!) throw new Error(lastAudioError);
         } else {
-          audioBlob = generateMockAudio();
+          throw new Error("No TTS provider configured. Please set up Inworld in Settings.");
         }
 
         const fd = new FormData();
@@ -392,7 +390,7 @@ export async function regenerateAssetFrontend(
         }
         if (!success) throw new Error(lastError || "All image generation attempts failed.");
       } else {
-        imageBlob = generateMockSVG(sceneNumber, scene.image_prompt || "");
+        throw new Error("No image provider configured. Please set up Whisk in Settings.");
       }
 
       const ext = settings.imageProvider === "whisk" ? "png" : "svg";
@@ -424,7 +422,7 @@ export async function regenerateAssetFrontend(
           settings.modelId || "inworld-tts-1.5-max"
         );
       } else {
-        audioBlob = generateMockAudio();
+        throw new Error("No TTS provider configured. Please set up Inworld in Settings.");
       }
 
       const fd = new FormData();
@@ -692,7 +690,7 @@ export async function resumeProject(projectId: string, callbacks: PipelineCallba
           }
           if (!success) throw new Error(lastWhiskError);
         } else {
-          imageBlob = generateMockSVG(num, scene.image_prompt || "");
+          throw new Error("No image provider configured. Please set up Whisk in Settings.");
         }
 
         const ext = settings.imageProvider === "whisk" ? "png" : "svg";

@@ -155,11 +155,11 @@ function getAudioDuration(file: string): number {
 function findImageFile(projectId: string, sceneNumber: number, dbFile?: string | null): string | null {
   const imgDir = path.join("uploads", projectId, "images");
   const candidates = [
-    dbFile ? path.join(imgDir, dbFile) : null,
+    dbFile && !dbFile.endsWith(".svg") ? path.join(imgDir, dbFile) : null,
     path.join(imgDir, `${sceneNumber}.png`),
     path.join(imgDir, `${sceneNumber}.jpg`),
     path.join(imgDir, `${sceneNumber}.jpeg`),
-    path.join(imgDir, `${sceneNumber}.svg`),
+    // .svg are mock placeholders — never use for rendering
   ].filter(Boolean) as string[];
   return candidates.find(p => fs.existsSync(p)) ?? null;
 }
