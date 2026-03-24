@@ -71,26 +71,26 @@ function buildKB(effect: KBEffect, dur: number, width: number, height: number, m
       // Crop window shrinks pW×pH → W×H (shows progressively less = zooms in)
       // then post-scale stretches back to W×H for consistent output size
       return `scale=${pW}:${pH}:flags=lanczos,` +
-             `crop=${pW}-${dx}*min(t\,${d})/${d}:${pH}-${dy}*min(t\,${d})/${d}:(iw-out_w)/2:(ih-out_h)/2,` +
+             `crop=${pW}-${dx}*min(t\\,${d})/${d}:${pH}-${dy}*min(t\\,${d})/${d}:(iw-out_w)/2:(ih-out_h)/2,` +
              `scale=${width}:${height}:flags=lanczos`;
     case "zoom-out":
       // Crop window grows W×H → pW×pH (shows progressively more = zooms out)
       return `scale=${pW}:${pH}:flags=lanczos,` +
-             `crop=${width}+${dx}*min(t\,${d})/${d}:${height}+${dy}*min(t\,${d})/${d}:(iw-out_w)/2:(ih-out_h)/2,` +
+             `crop=${width}+${dx}*min(t\\,${d})/${d}:${height}+${dy}*min(t\\,${d})/${d}:(iw-out_w)/2:(ih-out_h)/2,` +
              `scale=${width}:${height}:flags=lanczos`;
     case "pan-right":
       // Crop x advances left→right; output is always W×H so no post-scale needed
       return `scale=${pW}:${pH}:flags=lanczos,` +
-             `crop=${width}:${height}:min(${dx}*min(t\,${d})/${d}\,${dx}):${dy / 2}`;
+             `crop=${width}:${height}:min(${dx}*min(t\\,${d})/${d}\\,${dx}):${dy / 2}`;
     case "pan-left":
       return `scale=${pW}:${pH}:flags=lanczos,` +
-             `crop=${width}:${height}:max(${dx}*(1-min(t\,${d})/${d})\,0):${dy / 2}`;
+             `crop=${width}:${height}:max(${dx}*(1-min(t\\,${d})/${d})\\,0):${dy / 2}`;
     case "pan-up":
       return `scale=${pW}:${pH}:flags=lanczos,` +
-             `crop=${width}:${height}:${dx / 2}:max(${dy}*(1-min(t\,${d})/${d})\,0)`;
+             `crop=${width}:${height}:${dx / 2}:max(${dy}*(1-min(t\\,${d})/${d})\\,0)`;
     case "pan-down":
       return `scale=${pW}:${pH}:flags=lanczos,` +
-             `crop=${width}:${height}:${dx / 2}:min(${dy}*min(t\,${d})/${d}\,${dy})`;
+             `crop=${width}:${height}:${dx / 2}:min(${dy}*min(t\\,${d})/${d}\\,${dy})`;
   }
 }
 
