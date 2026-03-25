@@ -25,59 +25,7 @@ import {
   getRenderStatus,
   getRenderDownloadUrl,
 } from "@/lib/api";
-import { loadProviderSettings } from "@/lib/providers";
-
-// ── text splitting (same logic as TextSplitter page) ──────────────────────────
-const normalizeText = (text: string) =>
-  text.replace(/\r\n/g, "\n").replace(/\t/g, " ").replace(/[ ]+/g, " ").replace(/\n{3,}/g, "\n\n").trim();
-
-const splitIntoSentences = (text: string): string[] => {
-  const clean = normalizeText(text);
-  if (!clean) return [];
-  const matches = clean.match(/[^.!?\n]+(?:[.!?]+["')\]]*)?|\n+/g) || [];
-  return matches.map((p) => p.replace(/\s+/g, " ").trim()).filter(Boolean);
-};
-
-const splitLongSentence = (sentence: string, limit: number): string[] => {
-  const words = sentence.split(/\s+/).filter(Boolean);
-  if (words.length <= limit) return [sentence];
-  const pieces: string[] = [];
-  let start = 0;
-  while (start < words.length) {
-    let end = Math.min(start + limit, words.length);
-    if (end < words.length) {
-      for (let i = end; i > start + Math.floor(limit * 0.6); i -= 1) {
-        if (/[,:;)]$/.test(words[i - 1])) { end = i; break; }
-      }
-    }
-    pieces.push(words.slice(start, end).join(" "));
-    start = end;
-  }
-  return pieces;
-};
-
-function splitScript(text: string, targetWords: number): string[] {
-  const sentences = splitIntoSentences(text).flatMap((s) => splitLongSentence(s, targetWords));
-  const result: string[] = [];
-  let current = "";
-  let currentWords = 0;
-  const tolerance = Math.round(targetWords * 0.3);
-  for (const sentence of sentences) {
-    const words = sentence.trim().match(/\S+/g)?.length ?? 0;
-    if (!current) { current = sentence; currentWords = words; continue; }
-    if (currentWords + words <= targetWords + tolerance) {
-      current += " " + sentence;
-      currentWords += words;
-    } else {
-      result.push(current.trim());
-      current = sentence;
-      currentWords = words;
-    }
-  }
-  if (current.trim()) result.push(current.trim());
-  return result;
-}
-// ─────────────────────────────────────────────────────────────────────────────
+import { loadProviderSettings, splitScriptIntoScenes, splitScriptByDuration } from "@/lib/providers";
 
 type Step = "script" | "settings" | "progress";
 type Phase = "idle" | "creating" | "assets" | "clips" | "merging" | "done" | "error";
@@ -104,8 +52,6 @@ export default function VideoGen() {
   // step 1 — script
   const [script, setScript] = useState("");
   const [splitMode, setSplitMode] = useState<"smart" | "exact" | "duration">("smart");
-  const [targetWords, setTargetWords] = useState(80);
-
   // step 2 — settings
   const [title, setTitle] = useState("");
   const [resolution, setResolution] = useState<"480p" | "720p">("720p");
@@ -121,7 +67,11 @@ export default function VideoGen() {
   const [projectId, setProjectId] = useState<string | null>(null);
   const abortRef = useRef(false);
 
-  const scenes = useMemo(() => splitScript(script, targetWords), [script, targetWords]);
+  const scenes = useMemo(() => {
+    if (!script.trim()) return [];
+    if (splitMode === "duration") return splitScriptByDuration(script).map(s => s.script_text);
+    return splitScriptIntoScenes(script, splitMode === "exact" ? "exact" : "smart").map(s => s.script_text);
+  }, [script, splitMode]);
 
   // ── polling helpers ────────────────────────────────────────────────────────
   async function pollAssets(pid: string): Promise<void> {
@@ -215,7 +165,9 @@ export default function VideoGen() {
       if (abortRef.current) return;
 
       setPhase("done");
-      setPhaseLabel("Video ready!");
+      setPhaseLabel("Video ready! Opening preview...");
+      // Navigate to full project preview after a short delay
+      setTimeout(() => navigate(`/projects/${pid}/preview`), 1500);
     } catch (e: any) {
       setPhase("error");
       setErrorMsg(e.message ?? "Unknown error");
@@ -273,26 +225,10 @@ export default function VideoGen() {
                 </Select>
               </div>
 
-              {splitMode === "smart" && (
-                <div className="flex items-center gap-4">
-                  <div className="flex-1 space-y-1">
-                    <Label>Words per scene: {targetWords}</Label>
-                    <input
-                      type="range" min={40} max={200} step={10}
-                      value={targetWords}
-                      onChange={e => setTargetWords(Number(e.target.value))}
-                      className="w-full"
-                    />
-                  </div>
-                  <div className="text-sm text-muted-foreground text-right shrink-0">
-                    <span className="text-foreground font-medium">{scenes.length}</span> scenes
-                    {script && <><br />{script.trim().match(/\S+/g)?.length ?? 0} words</>}
-                  </div>
-                </div>
-              )}
-              {splitMode !== "smart" && script && (
+              {script && (
                 <p className="text-sm text-muted-foreground">
-                  ~{script.trim().match(/\S+/g)?.length ?? 0} words total · scenes determined by server at creation
+                  <span className="text-foreground font-medium">{scenes.length}</span> scenes
+                  {" · "}{script.trim().match(/\S+/g)?.length ?? 0} words total
                 </p>
               )}
             </CardContent>
