@@ -1,4 +1,4 @@
-import { Plus, FolderOpen, Settings, AlertTriangle, Scissors } from "lucide-react";
+import { Plus, FolderOpen, Settings, AlertTriangle, Scissors, Video } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useLocation } from "react-router-dom";
 import {
@@ -17,6 +17,7 @@ import {
 const items = [
   { title: "New Project", url: "/", icon: Plus },
   { title: "Projects", url: "/projects", icon: FolderOpen },
+  { title: "Video Gen", url: "/video-gen", icon: Video },
   { title: "Text Splitter", url: "/text-splitter", icon: Scissors },
   { title: "Error Log", url: "/errors", icon: AlertTriangle },
   { title: "Settings", url: "/settings", icon: Settings },

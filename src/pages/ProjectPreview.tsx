@@ -637,6 +637,9 @@ export default function ProjectPreview() {
                     <FolderDown className="h-3 w-3 mr-1" />Download ZIP
                   </Button>
                 </a>
+                <Button size="sm" variant="ghost" onClick={() => setClipStatus("idle")}>
+                  Re-generate Clips
+                </Button>
                 <Button size="sm" variant="default" onClick={handleRender}>
                   <Merge className="h-3 w-3 mr-1" />Merge Videos
                 </Button>
