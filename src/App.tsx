@@ -12,6 +12,7 @@ import Settings from "./pages/Settings";
 import ErrorLog from "./pages/ErrorLog";
 import TextSplitter from "./pages/TextSplitter";
 import VideoGen from "./pages/VideoGen";
+import ImageToVideo from "./pages/ImageToVideo";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -32,6 +33,7 @@ const App = () => (
             <Route path="/errors" element={<ErrorLog />} />
             <Route path="/text-splitter" element={<TextSplitter />} />
             <Route path="/video-gen" element={<VideoGen />} />
+            <Route path="/image-to-video" element={<ImageToVideo />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </AppLayout>

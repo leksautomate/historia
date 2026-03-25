@@ -50,12 +50,13 @@ export default function VideoGen() {
           onStats: () => {},
         }
       );
-      // Kick off the full background pipeline (images → clips → merge) on the server
+      // Kick off the full background pipeline: images → Veo animate → clips → merge
       setPhaseLabel("Starting background pipeline...");
+      const whiskCookie = settings.whiskCookie || undefined;
       await fetch(`/api/render/${pid}/auto`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ resolution }),
+        body: JSON.stringify({ resolution, whiskCookie }),
       });
       // Safe to leave / close browser — server handles everything
       navigate(`/projects/${pid}`);

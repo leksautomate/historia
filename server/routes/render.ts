@@ -1,4 +1,5 @@
 import express, { Request, Response } from "express";
+import multer from "multer";
 import { db } from "../db.js";
 import { projects, scenes } from "../../shared/schema.js";
 import { eq } from "drizzle-orm";
@@ -9,11 +10,13 @@ import archiver from "archiver";
 import { animateWhiskImage } from "../lib/whisk.js";
 
 const router = express.Router();
+const memUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024 } });
 
 // ── External render API ────────────────────────────────────────────────────
 const RENDER_API = (process.env.RENDER_API_URL ?? "http://5.189.146.143").replace(/\/$/, "");
 const RENDER_API_KEY = process.env.RENDER_API_KEY ?? "";
-const SERVER_URL = (process.env.SERVER_URL ?? "http://localhost:5000").replace(/\/$/, "");
+// Default to the actual port the app runs on (3001), not 5000
+const SERVER_URL = (process.env.SERVER_URL ?? `http://localhost:${process.env.PORT ?? 3001}`).replace(/\/$/, "");
 
 async function callRenderApi(endpoint: string, body: object): Promise<any> {
   const res = await fetch(`${RENDER_API}${endpoint}`, {
@@ -101,7 +104,7 @@ const RESOLUTIONS: Record<string, [number, number]> = {
 
 // ── In-memory job stores ───────────────────────────────────────────────────
 type AutoJob = {
-  status: "waiting_assets" | "generating_clips" | "merging" | "done" | "failed";
+  status: "waiting_assets" | "animating" | "generating_clips" | "merging" | "done" | "failed";
   resolution: string;
   error?: string;
 };
@@ -201,6 +204,53 @@ router.get("/health", async (_req: Request, res: Response) => {
   } catch (e: any) {
     const ms = Date.now() - start;
     return res.json({ ok: false, url, ms, error: e.message ?? "Unreachable" });
+  }
+});
+
+/**
+ * POST /api/render/image-to-video
+ * Convert a single uploaded image to an animated video clip.
+ * Body: multipart/form-data — image (required), animation, duration, resolution
+ * Returns: { url: string }  — the video URL from the render API (download directly)
+ */
+router.post("/image-to-video", memUpload.single("image"), async (req: Request, res: Response) => {
+  const file = (req as any).file as Express.Multer.File | undefined;
+  if (!file) return res.status(400).json({ error: "No image file provided" });
+
+  const animation = req.body.animation || "random";
+  const duration = Math.min(Math.max(parseFloat(req.body.duration) || 5, 1), 30);
+  const resKey = req.body.resolution === "480p" ? "480p" : "720p";
+  const [W, H] = RESOLUTIONS[resKey];
+  const FPS = 25;
+
+  // Save image to a temporary folder so the render API can fetch it
+  const tmpId = `itv_${Date.now()}`;
+  const tmpDir = path.join("uploads", tmpId, "images");
+  fs.mkdirSync(tmpDir, { recursive: true });
+  const ext = path.extname(file.originalname || "image.jpg") || ".jpg";
+  const imgPath = path.join(tmpDir, `1${ext}`);
+  fs.writeFileSync(imgPath, file.buffer);
+
+  try {
+    const imgUrl = `${SERVER_URL}/${imgPath.replace(/\\/g, "/")}`;
+    const chosenAnim = animation === "random" ? KB_TO_API[pickEffect()] : animation;
+
+    const animRes = await callRenderApi("/animate", {
+      media_url:  imgUrl,
+      media_type: "image",
+      animation:  chosenAnim,
+      duration,
+      fps:        FPS,
+      resolution: `${W}x${H}`,
+      folder:     tmpId,
+    });
+
+    return res.json({ url: animRes.url, animation: chosenAnim, duration, resolution: `${W}x${H}` });
+  } catch (e: any) {
+    return res.status(500).json({ error: e.message });
+  } finally {
+    // Clean up temp image (video lives on render API side)
+    try { fs.rmSync(path.join("uploads", tmpId), { recursive: true, force: true }); } catch {}
   }
 });
 
@@ -373,14 +423,16 @@ router.get("/:id/animate/zip", (req: Request, res: Response) => {
 
 /**
  * POST /api/render/:id/auto
- * Full background pipeline: wait for assets → generate clips → merge.
+ * Full background pipeline: wait for assets → (optionally) animate with Veo → generate clips → merge.
  * Returns immediately; runs entirely server-side.
+ * Body: { resolution?, whiskCookie? }
  */
 router.post("/:id/auto", async (req: Request, res: Response) => {
   const projectId = req.params.id;
   const resKey = req.body?.resolution === "480p" ? "480p" : "720p";
+  const whiskCookie: string | undefined = req.body?.whiskCookie || undefined;
   res.json({ success: true, message: "Auto pipeline started in background" });
-  runAutoPipeline(projectId, resKey).catch(e => {
+  runAutoPipeline(projectId, resKey, whiskCookie).catch(e => {
     console.error(`[auto] ${projectId} failed:`, e.message);
     if (autoJobs[projectId]) autoJobs[projectId] = { ...autoJobs[projectId], status: "failed", error: e.message };
   });
@@ -673,10 +725,10 @@ async function mergeVideo(projectId: string, sceneList: any[], width: number, he
 }
 
 /**
- * Full auto-pipeline: poll until all assets ready → generate clips → merge.
- * Runs entirely in-process; browser can be closed.
+ * Full auto-pipeline: poll until all assets ready → animate with Veo (if cookie provided)
+ * → generate clips → merge. Runs entirely in-process; browser can be closed.
  */
-async function runAutoPipeline(projectId: string, resKey: "480p" | "720p") {
+async function runAutoPipeline(projectId: string, resKey: "480p" | "720p", whiskCookie?: string) {
   const [W, H] = RESOLUTIONS[resKey];
   autoJobs[projectId] = { status: "waiting_assets", resolution: resKey };
   console.log(`[auto] ${projectId}: waiting for assets (${resKey})`);
@@ -705,6 +757,17 @@ async function runAutoPipeline(projectId: string, resKey: "480p" | "720p") {
   if (ready.length === 0) {
     autoJobs[projectId] = { ...autoJobs[projectId], status: "failed", error: "No scenes ready" };
     return;
+  }
+
+  // ── Veo animation (if Whisk cookie provided) ──────────────────────────────
+  if (whiskCookie) {
+    console.log(`[auto] ${projectId}: animating ${ready.length} scenes with Veo`);
+    autoJobs[projectId] = { ...autoJobs[projectId], status: "animating" as any };
+    animateJobs[projectId] = { status: "animating", progress: 0, done: 0, total: ready.length, sceneErrors: {} };
+    const sceneNums = ready.map(s => s.scene_number);
+    await animateScenes(projectId, sceneNums, ready, whiskCookie).catch(e => {
+      console.warn(`[auto] ${projectId}: Veo animation failed (continuing with stills): ${e.message}`);
+    });
   }
 
   console.log(`[auto] ${projectId}: ${ready.length} scenes ready → generating clips`);
