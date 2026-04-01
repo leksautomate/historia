@@ -23,7 +23,7 @@ export default function ProjectForm() {
   const [style2, setStyle2] = useState<File | null>(null);
   const [stylePrompt, setStylePrompt] = useState(COMPACT_STYLE_SUFFIX);
   const [voiceId, setVoiceId] = useState(settings.voiceId || "Dennis");
-  const [splitMode, setSplitMode] = useState<"smart" | "exact" | "duration">("smart");
+  const [splitMode, setSplitMode] = useState<"smart" | "exact" | "duration" | "two">("smart");
   const [loading, setLoading] = useState(false);
   const [phase, setPhase] = useState("");
   const [progress, setProgress] = useState(0);
@@ -228,12 +228,13 @@ export default function ProjectForm() {
 
               <div className="space-y-2">
                 <label className="text-sm font-medium text-foreground">Script Split Mode</label>
-                <Select value={splitMode} onValueChange={(v) => setSplitMode(v as "smart" | "exact" | "duration")}>
+                <Select value={splitMode} onValueChange={(v) => setSplitMode(v as "smart" | "exact" | "duration" | "two")}>
                   <SelectTrigger className="bg-secondary border-border">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="smart">Smart — 3 sentences per scene</SelectItem>
+                    <SelectItem value="smart">Smart — 2 or 3 sentences per scene</SelectItem>
+                    <SelectItem value="two">2 Sentences — exactly 2 per scene</SelectItem>
                     <SelectItem value="exact">Exact — 1 sentence per scene</SelectItem>
                     <SelectItem value="duration">Duration — adapts to speaking pace</SelectItem>
                   </SelectContent>

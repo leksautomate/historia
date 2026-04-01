@@ -30,6 +30,7 @@ export default function Settings() {
   const [newVoiceId, setNewVoiceId] = useState("");
   const [newVoiceName, setNewVoiceName] = useState("");
   const [showGroq, setShowGroq] = useState(false);
+  const [showAnthropic, setShowAnthropic] = useState(false);
   const [showWhisk, setShowWhisk] = useState(false);
   const [showInworld, setShowInworld] = useState(false);
 
@@ -222,6 +223,29 @@ export default function Settings() {
                   </Button>
                 </div>
                 <p className="text-xs text-muted-foreground">Scene splitting and prompt generation — get one at console.groq.com</p>
+              </div>
+
+              <div className="border-t border-border" />
+
+              {/* Anthropic */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-sm font-medium text-foreground">Anthropic API Key</label>
+                  <span className="text-xs text-muted-foreground bg-primary/10 text-primary px-2 py-0.5 rounded-full">Takes priority over Groq</span>
+                </div>
+                <div className="flex gap-2">
+                  <Input
+                    type={showAnthropic ? "text" : "password"}
+                    placeholder="sk-ant-..."
+                    value={settings.anthropicApiKey || ""}
+                    onChange={(e) => { setSettings(s => ({ ...s, anthropicApiKey: e.target.value })); }}
+                    className="bg-secondary flex-1"
+                  />
+                  <Button variant="ghost" size="icon" onClick={() => setShowAnthropic(!showAnthropic)}>
+                    {showAnthropic ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground">Uses Claude Sonnet for scene &amp; image prompt generation. If set, Groq key is not needed.</p>
               </div>
 
               <div className="border-t border-border" />

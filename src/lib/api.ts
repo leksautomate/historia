@@ -99,15 +99,16 @@ async function processRemainingChunks(
   startSceneNumber: number,
   projectId: string,
   groqApiKey: string,
-  splitMode: "smart" | "exact" | "duration",
-  stylePrompt?: string
+  splitMode: "smart" | "exact" | "duration" | "two",
+  stylePrompt?: string,
+  anthropicApiKey?: string
 ): Promise<void> {
   let nextSceneNumber = startSceneNumber;
   for (let i = chunkStartIdx; i < totalChunks; i++) {
     await new Promise(r => setTimeout(r, 3000));
     try {
       console.log(`[progressive] Processing chunk ${i + 1} of ${totalChunks}...`);
-      const chunkScenes = await generateScenesForChunk(title, chunks[i], i, totalChunks, nextSceneNumber, groqApiKey, splitMode, stylePrompt);
+      const chunkScenes = await generateScenesForChunk(title, chunks[i], i, totalChunks, nextSceneNumber, groqApiKey, splitMode, stylePrompt, anthropicApiKey);
       await appendScenesToProject(projectId, chunkScenes);
       nextSceneNumber += chunkScenes.length;
       console.log(`[progressive] Chunk ${i + 1} appended: ${chunkScenes.length} scenes`);
@@ -122,23 +123,24 @@ export async function createProjectFrontend(
   script: string,
   style1: File | null,
   style2: File | null,
-  options: { voiceId?: string; splitMode?: "smart" | "exact" | "duration"; stylePrompt?: string },
+  options: { voiceId?: string; splitMode?: "smart" | "exact" | "duration" | "two"; stylePrompt?: string },
   callbacks: PipelineCallbacks
 ): Promise<{ projectId: string; serverPipeline: boolean; sceneCount: number }> {
   const settings = loadProviderSettings();
-  if (!settings.groqApiKey) throw new Error("Groq API key not configured. Go to Settings to add it.");
+  if (!settings.groqApiKey && !settings.anthropicApiKey) throw new Error("No AI API key configured. Add a Groq or Anthropic API key in Settings.");
 
   const chunks = splitScriptIntoChunks(script, 800);
   const totalChunks = chunks.length;
 
+  const aiProvider = settings.anthropicApiKey ? "Claude" : "Groq";
   callbacks.onPhase(totalChunks > 1
-    ? `Generating scenes (chunk 1 of ${totalChunks})...`
-    : "Generating scene manifest via Groq..."
+    ? `Generating scenes via ${aiProvider} (chunk 1 of ${totalChunks})...`
+    : `Generating scene manifest via ${aiProvider}...`
   );
 
   let firstChunkScenes: SceneManifest[];
   try {
-    firstChunkScenes = await generateScenesForChunk(title, chunks[0], 0, totalChunks, 1, settings.groqApiKey, options.splitMode || "smart", options.stylePrompt);
+    firstChunkScenes = await generateScenesForChunk(title, chunks[0], 0, totalChunks, 1, settings.groqApiKey, options.splitMode || "smart", options.stylePrompt, settings.anthropicApiKey || undefined);
   } catch (e: any) {
     throw new Error(`Scene generation failed: ${e.message}`);
   }
@@ -176,7 +178,7 @@ export async function createProjectFrontend(
 
   if (totalChunks > 1) {
     const nextSceneNumber = firstChunkScenes.length + 1;
-    processRemainingChunks(title, chunks, 1, totalChunks, nextSceneNumber, serverProjectId, settings.groqApiKey, options.splitMode || "smart", options.stylePrompt)
+    processRemainingChunks(title, chunks, 1, totalChunks, nextSceneNumber, serverProjectId, settings.groqApiKey, options.splitMode || "smart", options.stylePrompt, settings.anthropicApiKey || undefined)
       .catch(e => console.error("[progressive] background processing error:", e.message));
   }
 

@@ -17,6 +17,7 @@ export interface ProviderSettings {
   imageConcurrency: number;
   audioConcurrency: number;
   groqApiKey: string;
+  anthropicApiKey: string;
   whiskCookie: string;
   inworldApiKey: string;
   customVoices: CustomVoice[];
@@ -64,6 +65,7 @@ const DEFAULTS: ProviderSettings = {
   imageConcurrency: 2,
   audioConcurrency: 2,
   groqApiKey: "",
+  anthropicApiKey: "",
   whiskCookie: "",
   inworldApiKey: "",
   customVoices: [],
@@ -225,10 +227,10 @@ function extractSentences(text: string): string[] {
   return sentences.length > 0 ? sentences : [text];
 }
 
-/** Split script into scenes — random 2-3 sentences per scene (smart) or 1 sentence (exact) */
+/** Split script into scenes — smart (2-3 sent.), two (exactly 2), or exact (1 sentence) */
 export function splitScriptIntoScenes(
   script: string,
-  splitMode: "smart" | "exact" = "smart"
+  splitMode: "smart" | "exact" | "two" = "smart"
 ): Array<{ scene_number: number; script_text: string }> {
   const sentences = extractSentences(script);
   const scenes: Array<{ scene_number: number; script_text: string }> = [];
@@ -236,7 +238,9 @@ export function splitScriptIntoScenes(
 
   let i = 0;
   while (i < sentences.length) {
-    const sentencesPerScene = splitMode === "exact" ? 1 : Math.floor(Math.random() * 2) + 2; // 2 or 3 sentences
+    const sentencesPerScene = splitMode === "exact" ? 1
+      : splitMode === "two" ? 2
+      : Math.floor(Math.random() * 2) + 2; // smart: 2 or 3 sentences
     const group = sentences.slice(i, i + sentencesPerScene).join(" ").trim();
     if (group) scenes.push({ scene_number: sceneNum++, script_text: group });
     i += sentencesPerScene;
@@ -370,6 +374,55 @@ async function callGroqForBatch(
   return parsed.scenes || [];
 }
 
+async function callClaudeForBatch(
+  title: string,
+  scenes: Array<{ scene_number: number; script_text: string }>,
+  anthropicApiKey: string,
+  retryOnRateLimit = true,
+  stylePrompt?: string
+): Promise<BatchPromptResult[]> {
+  const systemPrompt = stylePrompt ? STYLE_PROMPT_BATCH_IMAGE_PROMPT : BATCH_IMAGE_PROMPT;
+  const scenesText = scenes
+    .map(s => `Scene ${s.scene_number}: "${s.script_text}"`)
+    .join("\n");
+
+  const userPrompt = `Video Title: ${title}\n\nGenerate image prompts for these ${scenes.length} scenes:\n\n${scenesText}\n\nReturn ONLY the JSON object.`;
+
+  const result = await whiskProxy({
+    action: "claude-chat",
+    apiKey: anthropicApiKey,
+    payload: {
+      model: "claude-sonnet-4-6",
+      max_tokens: 8192,
+      system: systemPrompt,
+      messages: [{ role: "user", content: userPrompt }],
+    },
+  });
+
+  if (result.status && result.status >= 400) {
+    const errText = typeof result.data === "string"
+      ? result.data
+      : JSON.stringify(result.data || {}).substring(0, 500);
+    if (result.status === 429) {
+      if (retryOnRateLimit) {
+        console.log("[claude] Rate limited — waiting 15s before retry...");
+        await delay(15000);
+        return callClaudeForBatch(title, scenes, anthropicApiKey, false, stylePrompt);
+      }
+      throw new Error("Claude rate limited — try again in a moment.");
+    }
+    if (result.status === 401) throw new Error("Anthropic API key is invalid. Update it in Settings.");
+    throw new Error(`Claude API error (HTTP ${result.status}): ${errText.substring(0, 200)}`);
+  }
+
+  const content = result.data?.content?.[0]?.text;
+  if (!content) throw new Error("No content from Claude");
+  const cleaned = content.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim();
+  const match = cleaned.match(/\{[\s\S]*\}/);
+  const parsed = JSON.parse(match ? match[0] : cleaned);
+  return parsed.scenes || [];
+}
+
 export async function generateScenesForChunk(
   title: string,
   chunk: string,
@@ -377,15 +430,18 @@ export async function generateScenesForChunk(
   _totalChunks: number,
   startSceneNumber: number,
   groqApiKey: string,
-  splitMode: "smart" | "exact" | "duration" = "smart",
-  stylePrompt?: string
+  splitMode: "smart" | "exact" | "duration" | "two" = "smart",
+  stylePrompt?: string,
+  anthropicApiKey?: string
 ): Promise<SceneManifest[]> {
   const sceneChunks = (splitMode === "duration"
     ? splitScriptByDuration(chunk)
-    : splitScriptIntoScenes(chunk, splitMode === "exact" ? "exact" : "smart")
+    : splitScriptIntoScenes(chunk, splitMode === "exact" ? "exact" : splitMode === "two" ? "two" : "smart")
   ).map((s, idx) => ({ ...s, scene_number: startSceneNumber + idx }));
 
-  const prompts = await callGroqForBatch(title, sceneChunks, groqApiKey, true, stylePrompt);
+  const prompts = anthropicApiKey
+    ? await callClaudeForBatch(title, sceneChunks, anthropicApiKey, true, stylePrompt)
+    : await callGroqForBatch(title, sceneChunks, groqApiKey, true, stylePrompt);
 
   return sceneChunks.map((sc, idx) => {
     const p = prompts[idx] || {} as BatchPromptResult;
@@ -409,13 +465,14 @@ export async function generateSceneManifest(
   script: string,
   _styleSummary: any,
   groqApiKey: string,
-  splitMode: "smart" | "exact" | "duration" = "smart",
+  splitMode: "smart" | "exact" | "duration" | "two" = "smart",
   onChunkProgress?: (current: number, total: number) => void,
-  stylePrompt?: string
+  stylePrompt?: string,
+  anthropicApiKey?: string
 ): Promise<SceneManifest[]> {
   const sceneChunks = splitMode === "duration"
     ? splitScriptByDuration(script)
-    : splitScriptIntoScenes(script, splitMode === "exact" ? "exact" : "smart");
+    : splitScriptIntoScenes(script, splitMode === "exact" ? "exact" : splitMode === "two" ? "two" : "smart");
 
   const BATCH_SIZE = 30;
   const totalBatches = Math.ceil(sceneChunks.length / BATCH_SIZE);
@@ -426,7 +483,9 @@ export async function generateSceneManifest(
 
     const batch = sceneChunks.slice(i, i + BATCH_SIZE);
     const batchIdx = Math.floor(i / BATCH_SIZE);
-    const prompts = await callGroqForBatch(title, batch, groqApiKey, true, stylePrompt);
+    const prompts = anthropicApiKey
+      ? await callClaudeForBatch(title, batch, anthropicApiKey, true, stylePrompt)
+      : await callGroqForBatch(title, batch, groqApiKey, true, stylePrompt);
 
     const merged: SceneManifest[] = batch.map((sc, idx) => {
       const p = prompts[idx] || {} as BatchPromptResult;

@@ -18,7 +18,7 @@ export default function VideoGen() {
 
   const [step, setStep] = useState<Step>("script");
   const [script, setScript] = useState("");
-  const [splitMode, setSplitMode] = useState<"smart" | "exact" | "duration">("smart");
+  const [splitMode, setSplitMode] = useState<"smart" | "exact" | "duration" | "two">("smart");
   const [title, setTitle] = useState("");
   const [resolution, setResolution] = useState<"480p" | "720p">("720p");
   const [stylePrompt, setStylePrompt] = useState("");
@@ -29,7 +29,7 @@ export default function VideoGen() {
   const scenes = useMemo(() => {
     if (!script.trim()) return [];
     if (splitMode === "duration") return splitScriptByDuration(script).map(s => s.script_text);
-    return splitScriptIntoScenes(script, splitMode === "exact" ? "exact" : "smart").map(s => s.script_text);
+    return splitScriptIntoScenes(script, splitMode === "exact" ? "exact" : splitMode === "two" ? "two" : "smart").map(s => s.script_text);
   }, [script, splitMode]);
 
   async function handleGenerate() {
@@ -96,12 +96,13 @@ export default function VideoGen() {
               />
               <div className="space-y-1">
                 <Label>Script Split Mode</Label>
-                <Select value={splitMode} onValueChange={(v) => setSplitMode(v as "smart" | "exact" | "duration")}>
+                <Select value={splitMode} onValueChange={(v) => setSplitMode(v as "smart" | "exact" | "duration" | "two")}>
                   <SelectTrigger className="bg-secondary border-border">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="smart">Smart — 3 sentences per scene</SelectItem>
+                    <SelectItem value="smart">Smart — 2 or 3 sentences per scene</SelectItem>
+                    <SelectItem value="two">2 Sentences — exactly 2 per scene</SelectItem>
                     <SelectItem value="exact">Exact — 1 sentence per scene</SelectItem>
                     <SelectItem value="duration">Duration — adapts to speaking pace</SelectItem>
                   </SelectContent>
