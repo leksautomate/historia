@@ -245,7 +245,26 @@ export default function Settings() {
                     {showAnthropic ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                   </Button>
                 </div>
-                <p className="text-xs text-muted-foreground">Uses Claude Sonnet for scene &amp; image prompt generation. If set, Groq key is not needed.</p>
+                <p className="text-xs text-muted-foreground">Uses Claude for scene &amp; image prompt generation. If set, Groq key is not needed.</p>
+              </div>
+
+              {(settings.anthropicApiKey || "").length > 0 && (
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-foreground">Claude Model</label>
+                  <Select
+                    value={settings.claudeModel || "claude-sonnet-4-6"}
+                    onValueChange={(v) => setSettings(s => ({ ...s, claudeModel: v }))}
+                  >
+                    <SelectTrigger className="bg-secondary">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="claude-sonnet-4-6">Sonnet 4.6 — Best quality</SelectItem>
+                      <SelectItem value="claude-haiku-4-5-20251001">Haiku 4.5 — Faster &amp; cheaper</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
               </div>
 
               <div className="border-t border-border" />

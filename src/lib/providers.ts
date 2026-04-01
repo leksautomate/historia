@@ -18,6 +18,7 @@ export interface ProviderSettings {
   audioConcurrency: number;
   groqApiKey: string;
   anthropicApiKey: string;
+  claudeModel: string;
   whiskCookie: string;
   inworldApiKey: string;
   customVoices: CustomVoice[];
@@ -66,6 +67,7 @@ const DEFAULTS: ProviderSettings = {
   audioConcurrency: 2,
   groqApiKey: "",
   anthropicApiKey: "",
+  claudeModel: "claude-sonnet-4-6",
   whiskCookie: "",
   inworldApiKey: "",
   customVoices: [],
@@ -339,7 +341,7 @@ async function callGroqForBatch(
     action: "groq-chat",
     apiKey: groqApiKey,
     payload: {
-      model: "openai/gpt-oss-120b",
+      model: "llama-3.3-70b-versatile",
       messages: [
         { role: "system", content: systemPrompt },
         { role: "user", content: userPrompt },
@@ -379,7 +381,8 @@ async function callClaudeForBatch(
   scenes: Array<{ scene_number: number; script_text: string }>,
   anthropicApiKey: string,
   retryOnRateLimit = true,
-  stylePrompt?: string
+  stylePrompt?: string,
+  claudeModel = "claude-sonnet-4-6"
 ): Promise<BatchPromptResult[]> {
   const systemPrompt = stylePrompt ? STYLE_PROMPT_BATCH_IMAGE_PROMPT : BATCH_IMAGE_PROMPT;
   const scenesText = scenes
@@ -392,7 +395,7 @@ async function callClaudeForBatch(
     action: "claude-chat",
     apiKey: anthropicApiKey,
     payload: {
-      model: "claude-sonnet-4-6",
+      model: claudeModel,
       max_tokens: 8192,
       system: systemPrompt,
       messages: [{ role: "user", content: userPrompt }],
@@ -407,7 +410,7 @@ async function callClaudeForBatch(
       if (retryOnRateLimit) {
         console.log("[claude] Rate limited — waiting 15s before retry...");
         await delay(15000);
-        return callClaudeForBatch(title, scenes, anthropicApiKey, false, stylePrompt);
+        return callClaudeForBatch(title, scenes, anthropicApiKey, false, stylePrompt, claudeModel);
       }
       throw new Error("Claude rate limited — try again in a moment.");
     }
@@ -432,7 +435,8 @@ export async function generateScenesForChunk(
   groqApiKey: string,
   splitMode: "smart" | "exact" | "duration" | "two" = "smart",
   stylePrompt?: string,
-  anthropicApiKey?: string
+  anthropicApiKey?: string,
+  claudeModel?: string
 ): Promise<SceneManifest[]> {
   const sceneChunks = (splitMode === "duration"
     ? splitScriptByDuration(chunk)
@@ -440,7 +444,7 @@ export async function generateScenesForChunk(
   ).map((s, idx) => ({ ...s, scene_number: startSceneNumber + idx }));
 
   const prompts = anthropicApiKey
-    ? await callClaudeForBatch(title, sceneChunks, anthropicApiKey, true, stylePrompt)
+    ? await callClaudeForBatch(title, sceneChunks, anthropicApiKey, true, stylePrompt, claudeModel)
     : await callGroqForBatch(title, sceneChunks, groqApiKey, true, stylePrompt);
 
   return sceneChunks.map((sc, idx) => {
@@ -468,13 +472,14 @@ export async function generateSceneManifest(
   splitMode: "smart" | "exact" | "duration" | "two" = "smart",
   onChunkProgress?: (current: number, total: number) => void,
   stylePrompt?: string,
-  anthropicApiKey?: string
+  anthropicApiKey?: string,
+  claudeModel?: string
 ): Promise<SceneManifest[]> {
   const sceneChunks = splitMode === "duration"
     ? splitScriptByDuration(script)
     : splitScriptIntoScenes(script, splitMode === "exact" ? "exact" : splitMode === "two" ? "two" : "smart");
 
-  const BATCH_SIZE = 30;
+  const BATCH_SIZE = 10;
   const totalBatches = Math.ceil(sceneChunks.length / BATCH_SIZE);
   const allScenes: SceneManifest[] = [];
 
@@ -484,7 +489,7 @@ export async function generateSceneManifest(
     const batch = sceneChunks.slice(i, i + BATCH_SIZE);
     const batchIdx = Math.floor(i / BATCH_SIZE);
     const prompts = anthropicApiKey
-      ? await callClaudeForBatch(title, batch, anthropicApiKey, true, stylePrompt)
+      ? await callClaudeForBatch(title, batch, anthropicApiKey, true, stylePrompt, claudeModel)
       : await callGroqForBatch(title, batch, groqApiKey, true, stylePrompt);
 
     const merged: SceneManifest[] = batch.map((sc, idx) => {
@@ -691,7 +696,7 @@ export async function regenerateImagePrompt(
     action: "groq-chat",
     apiKey: groqApiKey,
     payload: {
-      model: "openai/gpt-oss-120b",
+      model: "llama-3.3-70b-versatile",
       messages: [
         {
           role: "system",

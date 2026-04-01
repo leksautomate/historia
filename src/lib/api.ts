@@ -101,14 +101,15 @@ async function processRemainingChunks(
   groqApiKey: string,
   splitMode: "smart" | "exact" | "duration" | "two",
   stylePrompt?: string,
-  anthropicApiKey?: string
+  anthropicApiKey?: string,
+  claudeModel?: string
 ): Promise<void> {
   let nextSceneNumber = startSceneNumber;
   for (let i = chunkStartIdx; i < totalChunks; i++) {
     await new Promise(r => setTimeout(r, 3000));
     try {
       console.log(`[progressive] Processing chunk ${i + 1} of ${totalChunks}...`);
-      const chunkScenes = await generateScenesForChunk(title, chunks[i], i, totalChunks, nextSceneNumber, groqApiKey, splitMode, stylePrompt, anthropicApiKey);
+      const chunkScenes = await generateScenesForChunk(title, chunks[i], i, totalChunks, nextSceneNumber, groqApiKey, splitMode, stylePrompt, anthropicApiKey, claudeModel);
       await appendScenesToProject(projectId, chunkScenes);
       nextSceneNumber += chunkScenes.length;
       console.log(`[progressive] Chunk ${i + 1} appended: ${chunkScenes.length} scenes`);
@@ -140,7 +141,7 @@ export async function createProjectFrontend(
 
   let firstChunkScenes: SceneManifest[];
   try {
-    firstChunkScenes = await generateScenesForChunk(title, chunks[0], 0, totalChunks, 1, settings.groqApiKey, options.splitMode || "smart", options.stylePrompt, settings.anthropicApiKey || undefined);
+    firstChunkScenes = await generateScenesForChunk(title, chunks[0], 0, totalChunks, 1, settings.groqApiKey, options.splitMode || "smart", options.stylePrompt, settings.anthropicApiKey || undefined, settings.claudeModel || undefined);
   } catch (e: any) {
     throw new Error(`Scene generation failed: ${e.message}`);
   }
@@ -178,7 +179,7 @@ export async function createProjectFrontend(
 
   if (totalChunks > 1) {
     const nextSceneNumber = firstChunkScenes.length + 1;
-    processRemainingChunks(title, chunks, 1, totalChunks, nextSceneNumber, serverProjectId, settings.groqApiKey, options.splitMode || "smart", options.stylePrompt, settings.anthropicApiKey || undefined)
+    processRemainingChunks(title, chunks, 1, totalChunks, nextSceneNumber, serverProjectId, settings.groqApiKey, options.splitMode || "smart", options.stylePrompt, settings.anthropicApiKey || undefined, settings.claudeModel || undefined)
       .catch(e => console.error("[progressive] background processing error:", e.message));
   }
 
