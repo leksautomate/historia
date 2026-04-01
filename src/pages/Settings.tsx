@@ -265,7 +265,6 @@ export default function Settings() {
                   </Select>
                 </div>
               )}
-              </div>
 
               <div className="border-t border-border" />
 
