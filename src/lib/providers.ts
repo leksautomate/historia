@@ -93,7 +93,7 @@ export function saveProviderSettings(settings: ProviderSettings) {
 // ── Style-prompt mode constants ────────────────────────────────────────────
 
 export const COMPACT_STYLE_SUFFIX =
-  `in a high-end historical epic documentary style, 19th-century academic military realism, cinematic oil painting, thick impasto brushstrokes, visible canvas texture, muted earth tones, dramatic chiaroscuro lighting, smoky atmosphere, historical accuracy, aged parchment cartography, vintage textured infographics, hand-inked military schematics, premium documentary look, desaturated palette, immersive cinematic composition, 16:9, highly detailed`;
+  `in a Digital oil painting, heavy impasto style, 19th-century academic military realism, cinematic oil painting, thick impasto brushstrokes, visible canvas texture, muted earth tones, dramatic chiaroscuro lighting, smoky atmosphere, historical accuracy, aged parchment cartography, vintage textured infographics, hand-inked military schematics, premium documentary look, desaturated palette, immersive cinematic composition, 16:9, highly detailed`;
 
 /** System prompt used when project has a stylePrompt — Groq generates ONLY the [Subject] part. */
 const STYLE_PROMPT_BATCH_IMAGE_PROMPT = `You are a visual content director for a historical epic documentary.
@@ -135,41 +135,33 @@ Return ONLY valid JSON matching this exact schema:
   ]
 }`;
 
-const BATCH_IMAGE_PROMPT = `You are a visual content director for a YouTube history documentary.
+const BATCH_IMAGE_PROMPT = `You are the Lead Creative Director and Historical Consultant for a high-end educational documentary series. You produce 5-to-10-minute historical videos — script and visual storyboard — exploring 17th-century warfare through a human-centered tactical lens.
+
 
 For each numbered scene below, generate ONE cinematic image prompt and THREE fallback prompts.
 
-VISUAL STYLE:
-- Cinematic historical realism, photographic documentary, Caravaggio-level contrast
-- Images must feel like film stills from a prestige historical epic or documentary reconstruction photography
-- No fantasy, no video game look, no cartoon, no neon, no sci-fi, no modern elements
+Use period-specific vocabulary throughout: Jacobite, Williamite, Stadtholder, Musket, Pike, Justacorps, Chiaroscuro, Impasto.
+each image prompt must follow the script not just random , it must follow the story
 
-VISUAL MAP:
-- MAP STYLE:
-- Base: Topographical relief on aged, tea-stained parchment.
-- Detail: 1900s military cartography, hand-inked contour lines, no digital labels.
-- Vibe: A physical artifact from a 1905 general’s war room.
-- MAP ANIMATION:
-- Animated arrows showing troop movement OR LOCATION
+2. VISUAL AESTHETIC
+All imagery must be rendered as Contemporary Digital Oil Painting with heavy Impasto texture. Brushstrokes must be visible throughout, especially in smoke, water, and sky. Apply Chiaroscuro lighting with dramatic contrast between deep shadow and focal highlights on faces, armor, and weapons. Black powder smoke must appear as a recurring visual element, framing scenes and creating atmospheric depth. All historical figures must be modeled after authenticated contemporary portraits but rendered with modern cinematic expressiveness.
 
-XAMPLE PROMPT FOR MAP:
+Follow a strict 70/30 visual distribution: 70% narrative illustrations including action shots, character portraits, and battlefield landscapes; 30% maps, infographics, and diagrams for strategic and historical data.
 
-"A cinematic 16:9 still of a concealed Japanese artillery battery firing from behind a mountain ridge, heavy smoke, 1905 uniforms, VISUAL STYLE: Cinematic historical realism, photographic documentary, Caravaggio-level contrast, no fantasy, muted earth tones."
+4. INFORMATIONAL ASSET DESIGN
+All maps must use a Tactical Parchment style: aged tea-stained background with visible creases, 17th-century hand-drawn cartographic coastlines, decorative compass roses, calligraphic place names, and modern high-contrast tactical arrows in blue for Williamite forces and red for Jacobite forces. All infographics must follow a Museum Gallery aesthetic with heraldic iconography including the Williamite Lion, the Jacobite Harp, and the French Fleur-de-lis placed as corner devices or header elements. All typography must use a Hybrid Vintage-Modern approach: elegant high-contrast serif fonts for titles and clean legible sans-serif fonts for data labels and annotations. Diagrams must use flowchart logic for causality chains such as: Smoke Confusion → Friendly Fire → Catastrophic Loss. Use distinct icons for infantry, cavalry, and artillery units alongside national flags and crests for army composition breakdowns.
+
+5. TACTICAL SPECIFICS
+When depicting the Battle of the Boyne or any conflict involving field identification challenges, the green sprig marker for Williamite forces and the white paper marker for Jacobite forces must appear prominently in all relevant close-up scenes and be specifically labeled in infographics. All multinational army compositions must be explicitly visualized through varying uniform colors, national flags, and unit crests representing Dutch, Danish, Huguenot, English, and Irish contingents.
+
+6. HARD CONSTRAINTS
+No photorealistic textures or clean CGI renders. No modern sans-serif fonts used in isolation without antique pairing elements. No flat 2D vector-style illustrations. No bright neon or digital-native gradient colors. No rapid cutting below the 9-second average image interval.
 
 
-PEOPLE — STRICT ANONYMITY:
-- All figures must be anonymous: warriors, commanders, soldiers — never identifiable by face
-- Faces must be obscured by helmets/hoods/shadow, turned away, silhouetted, or blurred by depth of field
-- Represent characters through posture, armor, weapons, body language only
+OPERATIONAL TRIGGER:
+When given a historical event, output the full script with word count, a scene-by-scene visual storyboard specifying image type (narrative or infographic
 
-ENVIRONMENTS: historically grounded, physically worn, dusty, sun-baked, or battle-scarred
-Include period-accurate details: spears, supply carts, banners, wooden shields, campfires, stone walls
-
-LIGHTING: harsh midday sun, pre-dawn blue light, torch and fire glow, dust-filtered gold, sunset silhouettes, smoke-filtered combat light
-
-COLOR: desaturated earth tones, bronze, iron, ochre, dust brown, deep reds and dark shadows
-
-PROMPT STRUCTURE — each prompt must be exactly ONE sentence:
+PROMPT STRUCTURE — each prompt must be exactly 2 to 3 sentence:
 [Who is present] + [what they are doing] + [where they are] + [camera angle/framing] + [lighting and mood]
 
 Every prompt MUST contain a CLEAR VISIBLE ACTION — never a static description.
@@ -184,6 +176,8 @@ HISTORICAL PERIOD ACCURACY — match weapons/armor/environment to the period in 
 - Medieval Crusades: iron chainmail, kite shields, siege towers, walled city backgrounds
 - Roman: lorica segmentata, scutum shields, formation marching, stone roads and fortifications
 - THE MAP
+- Infographics
+
 
 RESTRICTIONS: No text overlays, no identifiable faces, no fantasy/sci-fi/modern brands
 
@@ -242,7 +236,7 @@ export function splitScriptIntoScenes(
   while (i < sentences.length) {
     const sentencesPerScene = splitMode === "exact" ? 1
       : splitMode === "two" ? 2
-      : Math.floor(Math.random() * 2) + 2; // smart: 2 or 3 sentences
+        : Math.floor(Math.random() * 2) + 2; // smart: 2 or 3 sentences
     const group = sentences.slice(i, i + sentencesPerScene).join(" ").trim();
     if (group) scenes.push({ scene_number: sceneNum++, script_text: group });
     i += sentencesPerScene;
@@ -378,6 +372,17 @@ async function callGroqForBatch(
   return parsed.scenes || [];
 }
 
+/** Extract complete scene objects from a truncated JSON string */
+function recoverPartialScenes(raw: string): BatchPromptResult[] {
+  const results: BatchPromptResult[] = [];
+  const sceneRegex = /\{\s*"scene_number"\s*:\s*(\d+)[\s\S]*?"fallback_prompts"\s*:\s*\[[^\]]*\]\s*\}/g;
+  let m: RegExpExecArray | null;
+  while ((m = sceneRegex.exec(raw)) !== null) {
+    try { results.push(JSON.parse(m[0]) as BatchPromptResult); } catch { /* skip malformed */ }
+  }
+  return results;
+}
+
 async function callClaudeForBatch(
   title: string,
   scenes: Array<{ scene_number: number; script_text: string }>,
@@ -400,7 +405,7 @@ async function callClaudeForBatch(
     apiKey: anthropicApiKey,
     payload: {
       model: claudeModel,
-      max_tokens: 8192,
+      max_tokens: 16000,
       system: systemPrompt,
       messages: [{ role: "user", content: userPrompt }],
     },
@@ -427,8 +432,15 @@ async function callClaudeForBatch(
   const cleaned = content.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim();
   const match = cleaned.match(/\{[\s\S]*\}/);
   if (!match) throw new Error(`Claude did not return valid JSON. Response: ${cleaned.substring(0, 300)}`);
-  const parsed = JSON.parse(match[0]);
-  return parsed.scenes || [];
+  try {
+    const parsed = JSON.parse(match[0]);
+    return parsed.scenes || [];
+  } catch {
+    // JSON truncated — recover all complete scene objects
+    const recovered = recoverPartialScenes(match[0]);
+    if (recovered.length > 0) return recovered;
+    throw new Error(`Claude returned malformed JSON (${match[0].length} chars). Try reducing batch size.`);
+  }
 }
 
 export async function generateScenesForChunk(
@@ -484,7 +496,7 @@ export async function generateSceneManifest(
     ? splitScriptByDuration(script)
     : splitScriptIntoScenes(script, splitMode === "exact" ? "exact" : splitMode === "two" ? "two" : "smart");
 
-  const BATCH_SIZE = 10;
+  const BATCH_SIZE = anthropicApiKey ? 5 : 10;
   const totalBatches = Math.ceil(sceneChunks.length / BATCH_SIZE);
   const allScenes: SceneManifest[] = [];
 
