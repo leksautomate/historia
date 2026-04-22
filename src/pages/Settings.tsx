@@ -260,7 +260,7 @@ export default function Settings() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="claude-haiku-4-5-20251001">Haiku 4.5 — Latest &amp; faster</SelectItem>
-                      <SelectItem value="claude-haiku-3-5-20241022">Haiku 3 — Classic &amp; cheaper</SelectItem>
+                      <SelectItem value="claude-3-haiku-20240307">Haiku 3 — Classic &amp; cheaper</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
