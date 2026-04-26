@@ -517,40 +517,45 @@ async function buildVeoClip(
   veoPath: string, audioPath: string, dur: number,
   width: number, height: number, outPath: string
 ): Promise<void> {
+  const veoDur = getAudioDuration(veoPath); // ffprobe format=duration works for video too
+  const speed  = veoDur / dur;              // < 1.0 means Veo clip is shorter than audio
+
+  // Slow down if within a reasonable range; loop only as last resort for very long audio
+  const useSlowdown = speed >= 0.5 && speed < 1.0;
+  const useLoop     = speed < 0.5; // audio > 2× clip length — fall back to original loop
+
   const veoAudio = hasAudioStream(veoPath);
   const FPS = 25;
-  const effect = pickEffect();
-  // Veo clips: subtle zoom (1.15×) so it doesn't fight the AI motion
-  const kbFilter = buildKB(effect, dur, width, height, 1.15);
-  // fps=25 first normalises input frame rate so t expressions are consistent
-  const vScale = `fps=${FPS},${kbFilter},setsar=1,format=yuv420p`;
+  const kbFilter = buildKB(pickEffect(), dur, width, height, 1.15);
+
+  // setpts stretches PTS so the clip fills the audio duration; fps normalises frame rate
+  const vScale = useSlowdown
+    ? `setpts=PTS/${speed},fps=${FPS},${kbFilter},setsar=1,format=yuv420p`
+    : `fps=${FPS},${kbFilter},setsar=1,format=yuv420p`;
+
+  const loopArgs: string[] = useLoop ? ["-stream_loop", "-1"] : [];
+  const encArgs = [
+    "-c:v", "libx264", "-preset", "fast", "-crf", "22",
+    "-c:a", "aac", "-b:a", "128k", "-ar", "44100", "-ac", "2",
+  ];
 
   if (veoAudio) {
+    // Match Veo's ambient audio speed when slowing down so it stays in sync
+    const veoAudioFilter = useSlowdown ? `atempo=${speed},volume=0.1` : `volume=0.1`;
     await ffmpeg([
-      "-y",
-      "-stream_loop", "-1", "-i", veoPath,
-      "-i", audioPath,
+      "-y", ...loopArgs, "-i", veoPath, "-i", audioPath,
       "-filter_complex",
         `[0:v]${vScale}[v];` +
-        `[0:a]volume=0.1[va];[1:a]${AUDIO_FILTER}[na];[va][na]amix=inputs=2:duration=first[a]`,
-      "-map", "[v]", "-map", "[a]",
-      "-t", `${dur}`,
-      "-c:v", "libx264", "-preset", "fast", "-crf", "22",
-      "-c:a", "aac", "-b:a", "128k", "-ar", "44100", "-ac", "2",
-      outPath,
+        `[0:a]${veoAudioFilter}[va];[1:a]${AUDIO_FILTER}[na];[va][na]amix=inputs=2:duration=first[a]`,
+      "-map", "[v]", "-map", "[a]", "-t", `${dur}`,
+      ...encArgs, outPath,
     ]);
   } else {
     await ffmpeg([
-      "-y",
-      "-stream_loop", "-1", "-i", veoPath,
-      "-i", audioPath,
-      "-filter_complex",
-        `[0:v]${vScale}[v];[1:a]${AUDIO_FILTER}[a]`,
-      "-map", "[v]", "-map", "[a]",
-      "-t", `${dur}`,
-      "-c:v", "libx264", "-preset", "fast", "-crf", "22",
-      "-c:a", "aac", "-b:a", "128k", "-ar", "44100", "-ac", "2",
-      outPath,
+      "-y", ...loopArgs, "-i", veoPath, "-i", audioPath,
+      "-filter_complex", `[0:v]${vScale}[v];[1:a]${AUDIO_FILTER}[a]`,
+      "-map", "[v]", "-map", "[a]", "-t", `${dur}`,
+      ...encArgs, outPath,
     ]);
   }
 }

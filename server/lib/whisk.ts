@@ -87,12 +87,73 @@ export function getStyleImagePaths(projectId: string): string[] {
   ];
 }
 
-/**
- * Animate a landscape image into a ~8s video via the VPS Whisk proxy.
- * Uses POST /api/animate with multipart file upload.
- * Returns the raw video bytes.
- */
-export async function animateWhiskImage(
+const VEO_31_LITE_MODEL = "veo-3.1-lite-generate-preview";
+
+async function animateWithVeo31Lite(
+  imagePath: string,
+  cookie: string,
+  videoScript: string
+): Promise<Buffer> {
+  const whisk = new Whisk(cookie);
+  await (whisk as any).account.refresh();
+  const token: string = await (whisk as any).account.getToken();
+
+  const project = await whisk.newProject("Historia-anim-" + Date.now());
+  const workflowId: string = (project as any).projectId;
+
+  const imageData = fs.readFileSync(imagePath);
+  const ext = path.extname(imagePath).toLowerCase().replace(".", "") || "png";
+  const mimeType = ext === "jpg" || ext === "jpeg" ? "image/jpeg" : "image/png";
+  const encodedImage = `data:${mimeType};base64,${imageData.toString("base64")}`;
+  const prompt = videoScript || "Cinematic camera slowly pans across the scene";
+
+  const genRes = await fetch("https://aisandbox-pa.googleapis.com/v1/whisk:generateVideo", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
+    body: JSON.stringify({
+      promptImageInput: { prompt, rawBytes: encodedImage },
+      modelNameType: VEO_31_LITE_MODEL,
+      modelKey: "",
+      userInstructions: prompt,
+      loopVideo: false,
+      clientContext: { workflowId },
+    }),
+  });
+
+  if (!genRes.ok) {
+    const errText = await genRes.text().catch(() => "");
+    throw new Error(`Veo 3.1 lite generate failed (${genRes.status}): ${errText.substring(0, 200)}`);
+  }
+
+  const genData = await genRes.json();
+  const operationName: string | undefined = genData?.operation?.operation?.name;
+  if (!operationName) throw new Error("No operation name from Veo 3.1 lite");
+
+  // Poll up to 60 × 2s = 2 minutes
+  for (let i = 0; i < 60; i++) {
+    await new Promise(r => setTimeout(r, 2000));
+    const pollRes = await fetch("https://aisandbox-pa.googleapis.com/v1:runVideoFxSingleClipsStatusCheck", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
+      body: JSON.stringify({ operations: [{ operation: { name: operationName } }] }),
+    });
+    if (!pollRes.ok) continue;
+    const pollData = await pollRes.json();
+
+    if (pollData.status === "MEDIA_GENERATION_STATUS_SUCCESSFUL") {
+      const rawBytes: string | undefined = pollData.operations?.[0]?.rawBytes;
+      if (!rawBytes) throw new Error("No video bytes in Veo 3.1 lite response");
+      const base64 = rawBytes.replace(/^data:[^;]+;base64,/, "");
+      return Buffer.from(base64, "base64");
+    }
+    if (pollData.status === "MEDIA_GENERATION_STATUS_FAILED") {
+      throw new Error(`Veo 3.1 lite generation failed: ${JSON.stringify(pollData).substring(0, 200)}`);
+    }
+  }
+  throw new Error("Veo 3.1 lite timed out after 2 minutes");
+}
+
+async function animateViaVpsProxy(
   imagePath: string,
   cookie: string,
   videoScript: string
@@ -109,7 +170,7 @@ export async function animateWhiskImage(
   formData.append("script", videoScript || "Camera slowly pans left revealing the scene");
 
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 5 * 60 * 1000); // 5-min timeout
+  const timer = setTimeout(() => controller.abort(), 5 * 60 * 1000);
 
   try {
     const res = await fetch(`${WHISK_VPS}/api/animate`, {
@@ -135,4 +196,24 @@ export async function animateWhiskImage(
   } finally {
     clearTimeout(timer);
   }
+}
+
+/**
+ * Animate a landscape image into a ~8s video.
+ * Tries Veo 3.1 lite directly first; falls back to the VPS proxy if it fails.
+ */
+export async function animateWhiskImage(
+  imagePath: string,
+  cookie: string,
+  videoScript: string
+): Promise<Buffer> {
+  try {
+    console.log(`[whisk] Trying Veo 3.1 lite for ${path.basename(imagePath)}...`);
+    const buf = await animateWithVeo31Lite(imagePath, cookie, videoScript);
+    console.log(`[whisk] Veo 3.1 lite succeeded`);
+    return buf;
+  } catch (err: any) {
+    console.warn(`[whisk] Veo 3.1 lite failed (${err.message}) — falling back to VPS proxy`);
+  }
+  return animateViaVpsProxy(imagePath, cookie, videoScript);
 }

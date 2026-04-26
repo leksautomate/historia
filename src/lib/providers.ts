@@ -93,7 +93,7 @@ export function saveProviderSettings(settings: ProviderSettings) {
 // ── Style-prompt mode constants ────────────────────────────────────────────
 
 export const COMPACT_STYLE_SUFFIX =
-  `in a Digital oil painting, heavy impasto style, 19th-century academic military realism, cinematic oil painting, thick impasto brushstrokes, visible canvas texture, muted earth tones, dramatic chiaroscuro lighting, smoky atmosphere, historical accuracy, aged parchment cartography, vintage textured infographics, hand-inked military schematics, premium documentary look, desaturated palette, immersive cinematic composition, 16:9, highly detailed`;
+  `in a Digital oil painting, heavy impasto style, 17th-century academic military realism, cinematic oil painting, thick impasto brushstrokes, visible canvas texture, muted earth tones, dramatic chiaroscuro lighting, smoky atmosphere, historical accuracy, aged parchment cartography, vintage textured infographics, hand-inked military schematics, premium documentary look, desaturated palette, immersive cinematic composition, 16:9, highly detailed`;
 
 /** System prompt used when project has a stylePrompt — Groq generates ONLY the [Subject] part. */
 const STYLE_PROMPT_BATCH_IMAGE_PROMPT = `You are a visual content director for a historical epic documentary.
@@ -103,16 +103,15 @@ For each numbered scene below, generate ONE short subject description and THREE 
 PURPOSE: These will be combined with a style suffix later. Generate ONLY the [Subject] part.
 Do NOT include any style, mood, aesthetic, or quality words — those are added automatically.
 
-SUBJECT DESCRIPTION RULES:
-- Describe: WHO or WHAT is present, WHAT action is happening, WHERE it takes place, and one camera framing
-- One concise phrase or short sentence (10–20 words)
-- Use the correct scene type:
-  * Battle/action: "Russian infantry advancing through artillery smoke toward a trench line, ground-level wide shot"
-  * Portrait/figure: "A stern general in 1905 uniform studying a map by candlelight, over-the-shoulder framing"
-  * Map/geography: "Topographical military map of Manchuria showing troop movements during the Battle of Mukden"
-  * Diagram/schematic: "Diagram explaining indirect artillery fire over a mountain ridge, cross-section view"
-  * Chart/data: "Comparative bar chart showing the scale of major land engagements"
-  * Landscape/terrain: "Frozen Manchurian plains stretching to the horizon under an overcast sky, wide establishing shot"
+sample
+
+sample 
+
+
+Digital oil painting, heavy impasto. Black void frame, ancient Near Eastern landscape emerging from total darkness. A river surface occupies the lower third, catching gold late-afternoon light in broken, textured brushstrokes. The far bank is a steep dark mass, barely visible, with the silhouettes of Persian horsemen massed on the ridge like a wall. Deep chiaroscuro. No faces visible yet. Atmospheric, ominous. Title treatment: "GRANICUS" in high-contrast serif over the composition.
+ 
+Tactical Parchment map. Tea-stained aged vellum with visible creases. The Aegean coast of Asia Minor rendered in 17th-century cartographic hand with decorative compass rose lower right. The Hellespont crossing marked with a bold arrow in Williamite blue. Alexander's march route traced in blue from the crossing south to the Granicus River, marked with a crossed-lance icon. Hand-calligraphic place names: "Hellespont," "Granicus River," "Zelia," "Troy." Decorative border with Macedonian star motif. Clean sans-serif annotation: "Alexander's advance, Spring 334 BCE."
+ 
 
 HISTORICAL ACCURACY: Match uniforms, weapons, terrain, and props to the historical period in the video title.
 PEOPLE: Anonymous figures only — no identifiable faces. Silhouettes, backs turned, obscured by helmets/smoke/shadow.
@@ -161,7 +160,7 @@ No photorealistic textures or clean CGI renders. No modern sans-serif fonts used
 OPERATIONAL TRIGGER:
 When given a historical event, output the full script with word count, a scene-by-scene visual storyboard specifying image type (narrative or infographic
 
-PROMPT STRUCTURE — each prompt must be exactly 2 to 3 sentence:
+PROMPT STRUCTURE — each prompt must be exactly 2 to 4 sentence:
 [Who is present] + [what they are doing] + [where they are] + [camera angle/framing] + [lighting and mood]
 
 Every prompt MUST contain a CLEAR VISIBLE ACTION — never a static description.
@@ -262,21 +261,21 @@ export function splitScriptByDuration(
   for (const sentence of sentences) {
     const wordCount = sentence.trim().split(/\s+/).length;
     if (currentWords > 0 && currentWords + wordCount > maxWords) {
-      scenes.push({ scene_number: sceneNum++, script_text: currentSentences.join("").trim() });
+      scenes.push({ scene_number: sceneNum++, script_text: currentSentences.join(" ").trim() });
       currentSentences = [sentence];
       currentWords = wordCount;
     } else {
       currentSentences.push(sentence);
       currentWords += wordCount;
       if (currentWords >= targetWords) {
-        scenes.push({ scene_number: sceneNum++, script_text: currentSentences.join("").trim() });
+        scenes.push({ scene_number: sceneNum++, script_text: currentSentences.join(" ").trim() });
         currentSentences = [];
         currentWords = 0;
       }
     }
   }
   if (currentSentences.length > 0) {
-    const text = currentSentences.join("").trim();
+    const text = currentSentences.join(" ").trim();
     if (text) scenes.push({ scene_number: sceneNum++, script_text: text });
   }
   return scenes.length > 0 ? scenes : [{ scene_number: 1, script_text: script }];
@@ -368,7 +367,7 @@ async function callGroqForBatch(
   let content = data?.choices?.[0]?.message?.content;
   if (!content) throw new Error("No content from Groq");
   content = content.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim();
-  
+
   try {
     const parsed = JSON.parse(content);
     return parsed.scenes || [];
@@ -764,15 +763,15 @@ Return ONLY the prompt text — one sentence ending with a period. No JSON, no m
   const result = await whiskProxy({
     action: "groq-chat",
     apiKey: groqApiKey,
-      payload: {
-        model: "llama-3.3-70b-versatile",
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: userPrompt },
-        ],
-        temperature: 0.5,
-      },
-    });
+    payload: {
+      model: "llama-3.3-70b-versatile",
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt },
+      ],
+      temperature: 0.5,
+    },
+  });
 
   if (result.status && result.status >= 400) {
     const errText = typeof result.data === "string"
