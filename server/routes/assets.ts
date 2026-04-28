@@ -65,16 +65,31 @@ router.get("/download/:projectId", async (req: Request, res: Response) => {
     archive.pipe(res);
 
     const projectDir = path.join("uploads", projectId);
+    const imagesDir  = path.join(projectDir, "images");
+    const videosDir  = path.join(projectDir, "videos");
 
-    const imagesDir = path.join(projectDir, "images");
-    if (fs.existsSync(imagesDir)) {
-      archive.directory(imagesDir, "images");
-    }
-    const svgDir = path.join(projectDir, "images");
-    if (fs.existsSync(svgDir)) {
-      const svgFiles = fs.readdirSync(svgDir).filter(f => f.endsWith(".svg"));
-      for (const f of svgFiles) {
-        archive.file(path.join(svgDir, f), { name: `images/${f}` });
+    // Per-scene: prefer animated video over still image when available
+    for (const scene of projectScenes) {
+      const num = scene.scene_number;
+      const videoPath = path.join(videosDir, `${num}.mp4`);
+
+      if (fs.existsSync(videoPath)) {
+        archive.file(videoPath, { name: `videos/${num}.mp4` });
+      } else {
+        // Try stored filename first, then fall back to common extensions
+        const candidates = [
+          path.join(imagesDir, scene.image_file || `${num}.png`),
+          path.join(imagesDir, `${num}.png`),
+          path.join(imagesDir, `${num}.jpg`),
+          path.join(imagesDir, `${num}.webp`),
+          path.join(imagesDir, `${num}.svg`),
+        ];
+        for (const candidate of candidates) {
+          if (fs.existsSync(candidate)) {
+            archive.file(candidate, { name: `images/${path.basename(candidate)}` });
+            break;
+          }
+        }
       }
     }
 
