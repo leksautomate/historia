@@ -28,11 +28,6 @@ async function callRenderApi(endpoint: string, body: object): Promise<any> {
   return res.json();
 }
 
-async function downloadFile(url: string, localPath: string): Promise<void> {
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`Download failed: ${url} → ${res.status}`);
-  fs.writeFileSync(localPath, Buffer.from(await res.arrayBuffer()));
-}
 
 // ── Ken Burns effect types ─────────────────────────────────────────────────
 type KBEffect = "zoom-in" | "zoom-out" | "pan-right" | "pan-left" | "pan-up" | "pan-down";
@@ -101,6 +96,8 @@ const RESOLUTIONS: Record<string, [number, number]> = {
   "480p": [854, 480],
   "720p": [1280, 720],
 };
+
+const CONCURRENCY = Math.max(1, parseInt(process.env.CLIP_CONCURRENCY ?? "3", 10));
 
 // ── In-memory job stores ───────────────────────────────────────────────────
 type AutoJob = {
@@ -590,50 +587,52 @@ async function buildImageClip(
  * Duration = audio duration. Ken Burns effect applied at random (no repeat).
  */
 async function generateClips(projectId: string, sceneList: any[], width: number, height: number) {
-  const FPS = 25;
   const clipsDir = path.join("uploads", projectId, "clips");
   fs.mkdirSync(clipsDir, { recursive: true });
 
-  let prevEffect: KBEffect | undefined;
-  let done = 0;
+  const total = sceneList.length;
+  const counters = { done: 0, processed: 0 };
+  let head = 0;
 
-  for (let i = 0; i < sceneList.length; i++) {
-    const s = sceneList[i];
-    const num = s.scene_number;
+  async function worker(): Promise<void> {
+    while (true) {
+      const idx = head++;
+      if (idx >= sceneList.length) break;
+      const s = sceneList[idx];
+      const num = s.scene_number;
 
-    const img = findImageFile(projectId, num, s.image_file);
-    const audioPath = path.join("uploads", projectId, "audio", s.audio_file ?? `${num}.mp3`);
+      const img = findImageFile(projectId, num, s.image_file);
+      const audioPath = path.join("uploads", projectId, "audio", s.audio_file ?? `${num}.mp3`);
 
-    if (!img || !fs.existsSync(audioPath)) {
-      console.warn(`[clips] scene ${num}: missing files, skipping`);
-      clipJobs[projectId].progress = Math.round(((i + 1) / sceneList.length) * 100);
-      continue;
-    }
-
-    const dur = parseFloat(getAudioDuration(audioPath).toFixed(3));
-    const clipPath = path.join(clipsDir, `${num}.mp4`);
-    const veoPath = path.join("uploads", projectId, "videos", `${num}.mp4`);
-
-    try {
-      if (fs.existsSync(veoPath)) {
-        console.log(`[clips] scene ${num}: using Veo video`);
-        await buildVeoClip(veoPath, audioPath, dur, width, height, clipPath);
+      if (!img || !fs.existsSync(audioPath)) {
+        console.warn(`[clips] scene ${num}: missing files, skipping`);
       } else {
-        const effect = pickEffect(prevEffect);
-        prevEffect = effect;
-        console.log(`[clips] scene ${num}: generating locally (${effect}, ${dur}s)`);
-        await buildImageClip(img, audioPath, dur, width, height, clipPath, effect);
+        const dur = parseFloat(getAudioDuration(audioPath).toFixed(3));
+        const clipPath = path.join(clipsDir, `${num}.mp4`);
+        const veoPath = path.join("uploads", projectId, "videos", `${num}.mp4`);
+
+        try {
+          if (fs.existsSync(veoPath)) {
+            console.log(`[clips] scene ${num}: using Veo video`);
+            await buildVeoClip(veoPath, audioPath, dur, width, height, clipPath);
+          } else {
+            const effect = KB_EFFECTS[idx % KB_EFFECTS.length];
+            console.log(`[clips] scene ${num}: generating locally (${effect}, ${dur}s)`);
+            await buildImageClip(img, audioPath, dur, width, height, clipPath, effect);
+          }
+
+          clipJobs[projectId].done = ++counters.done;
+          console.log(`[clips] ${projectId}: scene ${num} done (${counters.done}/${total})`);
+        } catch (e: any) {
+          console.error(`[clips] scene ${num} failed — skipping:`, e.message);
+        }
       }
 
-      done++;
-      clipJobs[projectId].done = done;
-      console.log(`[clips] ${projectId}: scene ${num} done (${done}/${sceneList.length})`);
-    } catch (e: any) {
-      console.error(`[clips] scene ${num} failed — skipping:`, e.message);
+      clipJobs[projectId].progress = Math.round((++counters.processed / total) * 100);
     }
-
-    clipJobs[projectId].progress = Math.round(((i + 1) / sceneList.length) * 100);
   }
+
+  await Promise.all(Array.from({ length: CONCURRENCY }, worker));
 
   clipJobs[projectId] = { ...clipJobs[projectId], status: "done", progress: 100 };
   console.log(`[clips] ${projectId}: all clips done → ${clipsDir}`);
@@ -644,8 +643,6 @@ async function generateClips(projectId: string, sceneList: any[], width: number,
  * Reads from clips/ dir if pre-generated; otherwise generates clips inline.
  */
 async function mergeVideo(projectId: string, sceneList: any[], width: number, height: number) {
-  const FPS = 25;
-  const T = 0.1; // transition duration in seconds
   const clipsDir = path.join("uploads", projectId, "clips");
   const renderDir = path.join("uploads", projectId, "render");
   fs.mkdirSync(renderDir, { recursive: true });
