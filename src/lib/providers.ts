@@ -222,12 +222,32 @@ function extractSentences(text: string): string[] {
   return sentences.length > 0 ? sentences : [text];
 }
 
+function mergeShortSentences(sentences: string[], minWords: number): string[] {
+  const result: string[] = [];
+  for (const s of sentences) {
+    const wc = s.trim().split(/\s+/).filter(Boolean).length;
+    if (wc < minWords && result.length > 0) {
+      result[result.length - 1] += " " + s;
+    } else {
+      result.push(s);
+    }
+  }
+  // If the first sentence is still short, merge it into the second
+  if (result.length >= 2 && result[0].trim().split(/\s+/).filter(Boolean).length < minWords) {
+    result[1] = result[0] + " " + result[1];
+    result.shift();
+  }
+  return result;
+}
+
 /** Split script into scenes — smart (2-3 sent.), two (exactly 2), or exact (1 sentence) */
 export function splitScriptIntoScenes(
   script: string,
   splitMode: "smart" | "exact" | "two" = "smart"
 ): Array<{ scene_number: number; script_text: string }> {
-  const sentences = extractSentences(script);
+  const rawSentences = extractSentences(script);
+  // In exact mode, merge any sentence under 7 words into its neighbor
+  const sentences = splitMode === "exact" ? mergeShortSentences(rawSentences, 7) : rawSentences;
   const scenes: Array<{ scene_number: number; script_text: string }> = [];
   let sceneNum = 1;
 
