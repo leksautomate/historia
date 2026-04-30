@@ -397,8 +397,18 @@ export default function ProjectStatus() {
           <CardHeader><CardTitle className="text-lg font-display">Style References</CardTitle></CardHeader>
           <CardContent>
             <div className="grid grid-cols-2 gap-4">
-              <img src={getAssetUrl(project.id, "style", "style1.png")} alt="Style Reference 1" className="rounded-lg border border-border aspect-video object-cover" />
-              <img src={getAssetUrl(project.id, "style", "style2.png")} alt="Style Reference 2" className="rounded-lg border border-border aspect-video object-cover" />
+              <img 
+                src={getAssetUrl(project.id, "style", "style1.png")} 
+                alt="Style Reference 1" 
+                className="rounded-lg border border-border aspect-video object-cover bg-secondary"
+                onError={(e) => { e.currentTarget.style.display = 'none'; }} 
+              />
+              <img 
+                src={getAssetUrl(project.id, "style", "style2.png")} 
+                alt="Style Reference 2" 
+                className="rounded-lg border border-border aspect-video object-cover bg-secondary" 
+                onError={(e) => { e.currentTarget.style.display = 'none'; }} 
+              />
             </div>
           </CardContent>
         </Card>

@@ -40,6 +40,7 @@ export default function SceneCard({ scene, projectId, onRefresh, onAnimate, isAn
   const [regenImage, setRegenImage] = useState(false);
   const [regenAudio, setRegenAudio] = useState(false);
   const [splitOpen, setSplitOpen] = useState(false);
+  const [imgErrorUrl, setImgErrorUrl] = useState<string | null>(null);
 
   // Editable fields
   const [editingField, setEditingField] = useState<"script" | "tts" | "prompt" | null>(null);
@@ -48,7 +49,12 @@ export default function SceneCard({ scene, projectId, onRefresh, onAnimate, isAn
   // Per-scene voice
   const [voiceId, setVoiceId] = useState(scene.voice_id || "");
 
-  const imgUrl = scene.image_status === "completed" ? getAssetUrl(projectId, "images", scene.image_file) : null;
+  const imgUrl = scene.image_status === "completed" 
+    ? `${getAssetUrl(projectId, "images", scene.image_file)}?t=${scene.image_attempts || 0}` 
+    : null;
+    
+  const hasImgError = imgUrl && imgErrorUrl === imgUrl;
+
   const audioUrl = scene.audio_status === "completed" ? getAssetUrl(projectId, "audio", scene.audio_file) : null;
 
   const startEdit = (field: "script" | "tts" | "prompt") => {
@@ -205,7 +211,14 @@ export default function SceneCard({ scene, projectId, onRefresh, onAnimate, isAn
                 <StatusBadge status={scene.image_status} />
               </div>
               <div className="aspect-video rounded-md overflow-hidden bg-secondary border border-border">
-                {imgUrl ? <img src={imgUrl} alt={`Scene ${scene.scene_number}`} className="w-full h-full object-cover" /> : (
+                {imgUrl && !hasImgError ? (
+                  <img
+                    src={imgUrl}
+                    alt={`Scene ${scene.scene_number}`}
+                    className="w-full h-full object-cover"
+                    onError={() => { if (imgUrl) setImgErrorUrl(imgUrl); }}
+                  />
+                ) : (
                   <div className="w-full h-full flex items-center justify-center text-muted-foreground"><ImageIcon className="h-8 w-8" /></div>
                 )}
               </div>

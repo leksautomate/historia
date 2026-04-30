@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { getAssetUrl } from "@/lib/api";
 import type { Scene } from "@/lib/types";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
@@ -11,16 +12,19 @@ interface Props {
 }
 
 export default function Timeline({ scenes, projectId, onSelectScene, activeScene }: Props) {
+  const [imgErrors, setImgErrors] = useState<Set<string>>(new Set());
+
   if (scenes.length === 0) return null;
 
   return (
     <ScrollArea className="w-full">
       <div className="flex gap-3 pb-4 px-1 w-max">
         {scenes.map((scene) => {
-          const imgUrl =
-            scene.image_status === "completed"
-              ? getAssetUrl(projectId, "images", scene.image_file)
+          const imgUrl = scene.image_status === "completed"
+              ? `${getAssetUrl(projectId, "images", scene.image_file)}?t=${scene.image_attempts || 0}`
               : null;
+              
+          const hasError = imgUrl ? imgErrors.has(imgUrl) : false;
 
           const borderColor =
             scene.image_status === "completed"
@@ -39,11 +43,14 @@ export default function Timeline({ scenes, projectId, onSelectScene, activeScene
                 isActive ? "ring-2 ring-primary scale-105" : "hover:scale-105"
               }`}
             >
-              {imgUrl ? (
+              {imgUrl && !hasError ? (
                 <img
                   src={imgUrl}
                   alt={`Scene ${scene.scene_number}`}
                   className="w-full h-full object-cover"
+                  onError={() => {
+                    if (imgUrl) setImgErrors((prev) => new Set(prev).add(imgUrl));
+                  }}
                 />
               ) : (
                 <div className="w-full h-full bg-secondary flex items-center justify-center">
