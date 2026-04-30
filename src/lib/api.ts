@@ -546,6 +546,48 @@ export async function stopProject(projectId: string): Promise<void> {
   await apiRequest(`/projects/${projectId}/stop`, { method: "PATCH" });
 }
 
+// Load the image in the browser and confirm it has real pixel content (not a placeholder/blank/404)
+function isImageValid(projectId: string, scene: { image_file?: string | null }): Promise<boolean> {
+  if (!scene.image_file) return Promise.resolve(false);
+  if (scene.image_file.endsWith(".svg")) return Promise.resolve(false);
+  const url = getAssetUrl(projectId, "images", scene.image_file);
+  return new Promise((resolve) => {
+    const img = new window.Image();
+    const timer = setTimeout(() => resolve(false), 10000);
+    img.onload = () => { clearTimeout(timer); resolve(img.naturalWidth >= 50 && img.naturalHeight >= 50); };
+    img.onerror = () => { clearTimeout(timer); resolve(false); };
+    img.src = `${url}?v=${Date.now()}`;
+  });
+}
+
+export async function checkAndFixImages(
+  projectId: string,
+  scenes: Array<{ scene_number: number; image_status: string; image_file?: string | null }>,
+  onProgress: (done: number, total: number, bad: number) => void
+): Promise<number> {
+  const completed = scenes.filter(s => s.image_status === "completed");
+  let done = 0;
+  let bad = 0;
+  for (const scene of completed) {
+    const ok = await isImageValid(projectId, scene);
+    if (!ok) {
+      bad++;
+      await fetch(`${API_BASE}/projects/${projectId}/scenes/${scene.scene_number}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          image_status: "failed",
+          image_error: "Image missing or invalid — needs regeneration",
+          needs_review: true,
+        }),
+      });
+    }
+    done++;
+    onProgress(done, completed.length, bad);
+  }
+  return bad;
+}
+
 export async function startClipGeneration(projectId: string, resolution: "480p" | "720p"): Promise<{ total: number; resolution: string }> {
   return apiRequest(`/render/${projectId}/clips`, {
     method: "POST",

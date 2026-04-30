@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
-import { getProject, getAssetUrl, getDownloadUrl, bulkRegenerateFailed, bulkRegeneratePending, deleteProject, stopProject, resumeProject, runClientSidePipeline, startAnimateScenes, getAnimateStatus, type PipelineCallbacks } from "@/lib/api";
+import { getProject, getAssetUrl, getDownloadUrl, bulkRegenerateFailed, bulkRegeneratePending, checkAndFixImages, deleteProject, stopProject, resumeProject, runClientSidePipeline, startAnimateScenes, getAnimateStatus, type PipelineCallbacks } from "@/lib/api";
 import type { Project, Scene } from "@/lib/types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -15,7 +15,7 @@ import SceneCard from "@/components/SceneCard";
 import Timeline from "@/components/Timeline";
 import {
   ArrowLeft, Download, Image as ImageIcon, Volume2, AlertTriangle,
-  CheckCircle2, Loader2, Scroll, RefreshCw, Play, Trash2, Square, RotateCw,
+  CheckCircle2, Loader2, Scroll, RefreshCw, Play, Trash2, Square, RotateCw, ScanSearch,
 } from "lucide-react";
 import { toast } from "sonner";
 import { loadProviderSettings } from "@/lib/providers";
@@ -47,6 +47,8 @@ export default function ProjectStatus() {
   const [bulkAudioProgress, setBulkAudioProgress] = useState({ done: 0, total: 0 });
   const [bulkGenerating, setBulkGenerating] = useState(false);
   const [bulkGenerateProgress, setBulkGenerateProgress] = useState({ done: 0, total: 0 });
+  const [checkingImages, setCheckingImages] = useState(false);
+  const [checkProgress, setCheckProgress] = useState({ done: 0, total: 0, bad: 0 });
   const [isResuming, setIsResuming] = useState(false);
   const [isStopping, setIsStopping] = useState(false);
   const [clientPipelineRunning, setClientPipelineRunning] = useState(false);
@@ -180,6 +182,27 @@ export default function ProjectStatus() {
     } finally {
       setBulkGenerating(false);
       fetchData();
+    }
+  };
+
+  const handleCheckImages = async () => {
+    if (!projectId) return;
+    setCheckingImages(true);
+    setCheckProgress({ done: 0, total: 0, bad: 0 });
+    try {
+      const bad = await checkAndFixImages(projectId, scenes, (done, total, bad) => {
+        setCheckProgress({ done, total, bad });
+      });
+      if (bad > 0) {
+        toast.warning(`Found ${bad} blank/missing image(s) — marked for regeneration.`);
+      } else {
+        toast.success("All images verified — no issues found.");
+      }
+      fetchData();
+    } catch (e: any) {
+      toast.error(e.message);
+    } finally {
+      setCheckingImages(false);
     }
   };
 
@@ -420,11 +443,23 @@ export default function ProjectStatus() {
           <div className="flex items-center justify-between flex-wrap gap-2">
             <h2 className="text-xl font-display text-foreground">Scenes ({scenes.length})</h2>
             <div className="flex gap-2 flex-wrap">
+              <Button
+                variant="outline"
+                onClick={handleCheckImages}
+                disabled={checkingImages || bulkGenerating || bulkRetrying || project.status === "processing"}
+                className="text-sm"
+              >
+                {checkingImages ? (
+                  <><Loader2 className="h-4 w-4 animate-spin mr-2" /> Checking {checkProgress.done}/{checkProgress.total}{checkProgress.bad > 0 ? ` (${checkProgress.bad} bad)` : ""}</>
+                ) : (
+                  <><ScanSearch className="h-4 w-4 mr-2" /> Check All Images</>
+                )}
+              </Button>
               {pendingImageScenes.length > 0 && (
                 <Button
                   variant="default"
                   onClick={handleGeneratePending}
-                  disabled={bulkGenerating || bulkRetrying || project.status === "processing"}
+                  disabled={bulkGenerating || bulkRetrying || checkingImages || project.status === "processing"}
                   className="text-sm"
                 >
                   {bulkGenerating ? (
