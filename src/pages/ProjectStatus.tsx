@@ -514,12 +514,12 @@ export default function ProjectStatus() {
                   )}
                 </Button>
               )}
-              {pendingAudioScenes.length > 0 && failedAudioScenes.length < pendingAudioScenes.length && (
-                <Button variant="outline" onClick={handleGenerateMissingAudio} disabled={bulkGeneratingAudio || bulkRetryingAudio || project.status === "processing"} className="text-sm">
+              {pendingAudioScenes.length > 0 && (
+                <Button variant="default" onClick={handleGenerateMissingAudio} disabled={bulkGeneratingAudio || bulkRetryingAudio || project.status === "processing"} className="text-sm">
                   {bulkGeneratingAudio ? (
                     <><Loader2 className="h-4 w-4 animate-spin mr-2" /> Generating Audio {bulkAudioGenerateProgress.done}/{bulkAudioGenerateProgress.total}</>
                   ) : (
-                    <><Volume2 className="h-4 w-4 mr-2" /> Generate Missing Audio ({pendingAudioScenes.length - failedAudioScenes.length})</>
+                    <><Volume2 className="h-4 w-4 mr-2" /> Generate Missing Audio ({pendingAudioScenes.length})</>
                   )}
                 </Button>
               )}
