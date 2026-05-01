@@ -58,6 +58,31 @@ router.get("/:id", async (req: Request, res: Response) => {
     const projectScenes = await db.select().from(scenes)
       .where(eq(scenes.project_id, req.params.id))
       .orderBy(scenes.scene_number);
+
+    // Dynamically calculate accurate stats to ensure UI is perfectly in sync
+    const imagesCompleted = projectScenes.filter(s => s.image_status === "completed").length;
+    const audioCompleted = projectScenes.filter(s => s.audio_status === "completed").length;
+    const imagesFailed = projectScenes.filter(s => s.image_status === "failed").length;
+    const audioFailed = projectScenes.filter(s => s.audio_status === "failed").length;
+    const needsReviewCount = projectScenes.filter(s => s.needs_review).length;
+
+    const actualStats = {
+      ...((project.stats as any) || {}),
+      sceneCount: projectScenes.length,
+      imagesCompleted,
+      audioCompleted,
+      imagesFailed,
+      audioFailed,
+      needsReviewCount,
+    };
+    
+    // Only update the database if the stats have actually drifted
+    if (JSON.stringify(project.stats) !== JSON.stringify(actualStats)) {
+      await db.update(projects).set({ stats: actualStats }).where(eq(projects.id, req.params.id));
+    }
+    
+    project.stats = actualStats;
+
     res.json({ project, scenes: projectScenes });
   } catch (e: any) {
     res.status(500).json({ error: e.message });
@@ -650,6 +675,27 @@ router.patch("/:id/scenes/:sceneNumber", async (req: Request, res: Response) => 
     await db.update(scenes).set(updates)
       .where(eq(scenes.project_id, projectId))
       .where(eq(scenes.scene_number, Number(sceneNumber)));
+
+    // Recalculate and update project stats to stay in sync
+    const allScenes = await db.select().from(scenes).where(eq(scenes.project_id, projectId));
+    const stats = {
+      sceneCount: allScenes.length,
+      imagesCompleted: allScenes.filter((s: any) => s.image_status === "completed").length,
+      audioCompleted: allScenes.filter((s: any) => s.audio_status === "completed").length,
+      imagesFailed: allScenes.filter((s: any) => s.image_status === "failed").length,
+      audioFailed: allScenes.filter((s: any) => s.audio_status === "failed").length,
+      needsReviewCount: allScenes.filter((s: any) => s.needs_review).length,
+    };
+    
+    // Preserve any existing serverPipeline flag if present
+    const [existingProject] = await db.select({ stats: projects.stats }).from(projects).where(eq(projects.id, projectId));
+    const currentStats = (existingProject?.stats as any) || {};
+    if (currentStats.serverPipeline) {
+      (stats as any).serverPipeline = currentStats.serverPipeline;
+    }
+
+    await db.update(projects).set({ stats }).where(eq(projects.id, projectId));
+
     res.json({ success: true });
   } catch (e: any) {
     res.status(500).json({ error: e.message });
@@ -694,7 +740,77 @@ router.post("/:id/fix-mocks", async (req: Request, res: Response) => {
         fixed++;
       }
     }
+    
+    if (fixed > 0) {
+      const finalScenes = await db.select().from(scenes).where(eq(scenes.project_id, projectId));
+      const stats = {
+        sceneCount: finalScenes.length,
+        imagesCompleted: finalScenes.filter(s => s.image_status === "completed").length,
+        audioCompleted: finalScenes.filter(s => s.audio_status === "completed").length,
+        imagesFailed: finalScenes.filter(s => s.image_status === "failed").length,
+        audioFailed: finalScenes.filter(s => s.audio_status === "failed").length,
+        needsReviewCount: finalScenes.filter(s => s.needs_review).length,
+      };
+      
+      const [existingProject] = await db.select({ stats: projects.stats }).from(projects).where(eq(projects.id, projectId));
+      const currentStats = (existingProject?.stats as any) || {};
+      if (currentStats.serverPipeline) {
+        (stats as any).serverPipeline = currentStats.serverPipeline;
+      }
+      
+      await db.update(projects).set({ stats }).where(eq(projects.id, projectId));
+    }
+
     res.json({ success: true, fixed });
+  } catch (e: any) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+router.post("/:id/sync-audio-status", async (req: Request, res: Response) => {
+  try {
+    const projectId = req.params.id;
+    const [project] = await db.select().from(projects).where(eq(projects.id, projectId));
+    if (!project) return res.status(404).json({ error: "Project not found" });
+
+    const allScenes = await db.select().from(scenes)
+      .where(eq(scenes.project_id, projectId))
+      .orderBy(scenes.scene_number);
+
+    const pending = allScenes.filter(s => s.audio_status !== "completed");
+    let synced = 0;
+
+    for (const scene of pending) {
+      const audioPath = path.join("uploads", projectId, "audio", `${scene.scene_number}.mp3`);
+      if (fs.existsSync(audioPath)) {
+        await db.update(scenes)
+          .set({ audio_status: "completed", audio_file: `${scene.scene_number}.mp3`, audio_attempts: 1 })
+          .where(eq(scenes.project_id, projectId))
+          .where(eq(scenes.scene_number, scene.scene_number));
+        synced++;
+      }
+    }
+
+    const finalScenes = await db.select().from(scenes).where(eq(scenes.project_id, projectId));
+    const audioCompleted = finalScenes.filter(s => s.audio_status === "completed").length;
+    const imageCompleted = finalScenes.filter(s => s.image_status === "completed").length;
+    const hasFailures = finalScenes.some(s => s.audio_status === "failed" || s.image_status === "failed");
+    const newStatus = (audioCompleted === finalScenes.length && imageCompleted === finalScenes.length && !hasFailures)
+      ? "completed" : "partial";
+    await db.update(projects)
+      .set({
+        status: newStatus,
+        stats: {
+          totalScenes: finalScenes.length,
+          imagesCompleted: imageCompleted,
+          audioCompleted,
+          imagesFailed: finalScenes.filter(s => s.image_status === "failed").length,
+          audioFailed: finalScenes.filter(s => s.audio_status === "failed").length,
+        },
+      })
+      .where(eq(projects.id, projectId));
+
+    res.json({ synced, total: pending.length });
   } catch (e: any) {
     res.status(500).json({ error: e.message });
   }

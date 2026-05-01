@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
-import { getProject, getAssetUrl, getDownloadUrl, bulkRegenerateFailed, bulkRegeneratePending, bulkGenerateMissingAudio, checkAndFixImages, deleteProject, stopProject, resumeProject, runClientSidePipeline, startAnimateScenes, getAnimateStatus, type PipelineCallbacks } from "@/lib/api";
+import { getProject, getAssetUrl, getDownloadUrl, bulkRegenerateFailed, bulkRegeneratePending, bulkGenerateMissingAudio, checkAndFixImages, syncAudioStatus, deleteProject, stopProject, resumeProject, runClientSidePipeline, startAnimateScenes, getAnimateStatus, type PipelineCallbacks } from "@/lib/api";
 import type { Project, Scene } from "@/lib/types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -51,6 +51,7 @@ export default function ProjectStatus() {
   const [bulkGenerateProgress, setBulkGenerateProgress] = useState({ done: 0, total: 0 });
   const [checkingImages, setCheckingImages] = useState(false);
   const [checkProgress, setCheckProgress] = useState({ done: 0, total: 0, bad: 0 });
+  const [syncingAudio, setSyncingAudio] = useState(false);
   const [isResuming, setIsResuming] = useState(false);
   const [isStopping, setIsStopping] = useState(false);
   const [clientPipelineRunning, setClientPipelineRunning] = useState(false);
@@ -191,6 +192,20 @@ export default function ProjectStatus() {
     } finally {
       setBulkGeneratingAudio(false);
       fetchData();
+    }
+  };
+
+  const handleSyncAudio = async () => {
+    if (!projectId) return;
+    setSyncingAudio(true);
+    try {
+      const { synced } = await syncAudioStatus(projectId);
+      toast.success(`Synced ${synced} scene${synced !== 1 ? "s" : ""} from disk`);
+      fetchData();
+    } catch (e: any) {
+      toast.error(e.message);
+    } finally {
+      setSyncingAudio(false);
     }
   };
 
@@ -515,11 +530,11 @@ export default function ProjectStatus() {
                 </Button>
               )}
               {pendingAudioScenes.length > 0 && (
-                <Button variant="default" onClick={handleGenerateMissingAudio} disabled={bulkGeneratingAudio || bulkRetryingAudio || project.status === "processing"} className="text-sm">
-                  {bulkGeneratingAudio ? (
-                    <><Loader2 className="h-4 w-4 animate-spin mr-2" /> Generating Audio {bulkAudioGenerateProgress.done}/{bulkAudioGenerateProgress.total}</>
+                <Button variant="default" onClick={handleSyncAudio} disabled={syncingAudio || project.status === "processing"} className="text-sm">
+                  {syncingAudio ? (
+                    <><Loader2 className="h-4 w-4 animate-spin mr-2" /> Syncing…</>
                   ) : (
-                    <><Volume2 className="h-4 w-4 mr-2" /> Generate Missing Audio ({pendingAudioScenes.length})</>
+                    <><Volume2 className="h-4 w-4 mr-2" /> Sync Audio from Disk ({pendingAudioScenes.length})</>
                   )}
                 </Button>
               )}

@@ -555,6 +555,12 @@ export async function bulkGenerateMissingAudio(
   }
 }
 
+export async function syncAudioStatus(projectId: string): Promise<{ synced: number; total: number }> {
+  const res = await fetch(`/api/projects/${projectId}/sync-audio-status`, { method: "POST" });
+  if (!res.ok) throw new Error((await res.json()).error);
+  return res.json();
+}
+
 export async function stopProject(projectId: string): Promise<void> {
   await apiRequest(`/projects/${projectId}/stop`, { method: "PATCH" });
 }
